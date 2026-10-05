@@ -91,10 +91,12 @@ Configura `DATABASE_URL`, `JWT_SECRET`, `JWT_MINUTES` y `CORS_ORIGINS` como vari
 Antes de compilar la aplicación para tu papá, crea `frontend/.env`:
 
 ```dotenv
-VITE_API_URL=https://TU-SERVICIO.up.railway.app
+VITE_API_URL=https://lexio-production-bfce.up.railway.app
 ```
 
 La URL se incorpora durante la compilación; si cambia, recompila. Si usas un dominio propio, añádelo también a `connect-src` en `frontend/src-tauri/tauri.conf.json`. Reinicia Vite al cambiar `.env`.
+
+El 4 de octubre de 2026 se verificaron respuestas HTTP 200 de `/health` y `/openapi.json` en esa URL y CORS para `http://localhost:1420`. David confirmó que ejecutó el esquema de las 15 tablas; aún falta crear el administrador con `backend/bootstrap.py` y verificar un login real contra MySQL. La URL pública usa HTTPS sin añadir el puerto interno 8080.
 
 ## Flujo de uso
 
