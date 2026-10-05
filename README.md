@@ -76,7 +76,16 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
-El instalador se genera bajo `frontend/src-tauri/target/release/bundle`. Se verificó la compilación web, pero no se generó el `.exe`: Rust no estaba disponible en este equipo durante la verificación.
+El instalador se genera bajo `frontend/src-tauri/target/release/bundle`. El 4 de octubre de 2026 se compiló el instalador Windows x64 `frontend/src-tauri/target/release/bundle/nsis/Lexio_0.1.0_x64-setup.exe` (aproximadamente 1,40 MiB), con la API de Railway configurada. Falta probar su instalación e inicio de sesión real. No está firmado digitalmente.
+
+Para volver a generar únicamente el instalador `.exe`, desde `frontend`:
+
+```powershell
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+pnpm tauri build --bundles nsis
+```
+
+Distribuye el archivo `Lexio_0.1.0_x64-setup.exe`. Cada usuario lo instala en Windows e ingresa con su propia cuenta; necesita internet, pero no Python, MySQL, Node ni el repositorio. El instalador puede descargar WebView2 si hace falta. Esta versión no tiene actualizaciones automáticas; para una nueva entrega aumenta la versión, compila y distribuye el nuevo instalador.
 
 ### 5. Railway y dirección de la API
 
@@ -129,7 +138,7 @@ pnpm build
 
 Se comprobaron 15 pruebas con SQLite temporal y claves foráneas activas: aislamiento tenant/caso, lectura y edición, exclusión financiera, archivos restringidos, conservación de ceros, validación de responsables, pagos parciales, reversiones, excedentes, aplicación de crédito, redondeo, reprogramación, avisos sin duplicados, casos concluidos con deuda y login. Se compiló React/TypeScript/Vite/Tailwind y se revisó la UI en navegador con una base temporal independiente de Railway.
 
-El generador `backend/export_sql.py` produce el DDL MySQL sin abrir conexiones. No se verificó su ejecución en un servidor MySQL ni se probó el instalador Tauri.
+El generador `backend/export_sql.py` produce el DDL MySQL sin abrir conexiones. David confirmó que ejecutó el esquema en HeidiSQL; falta validar su funcionamiento real con MySQL. Se generó el instalador Tauri, pero aún no se probó su instalación.
 
 ## Límites y próximos pasos
 

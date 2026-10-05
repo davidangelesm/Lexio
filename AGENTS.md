@@ -43,7 +43,7 @@ Fase 2: comercialización SaaS multi-tenant. Diseñar para esta fase desde el pr
 - Avisos configurables 3 y 1 días hábiles lunes a viernes, sin feriados. No desplazar fecha límite original; leer no resuelve obligación.
 - Archivos como enlaces privados HTTPS. La API controla devolución del enlace, pero los permisos externos de Drive deben administrarse también en Drive. Descarga privada/proxy aún pendiente.
 - Corte de reportes filtra contrataciones y abonos por fecha usando reversiones y condiciones actuales; no reconstruye versiones históricas. No presentar estos cortes como fotos históricas completas.
-- Hay requirements.txt, pnpm-lock.yaml y 15 pruebas locales con SQLite. El frontend compila; falta verificar MySQL real, despliegue Railway y build .exe con Rust.
+- Hay requirements.txt, pnpm-lock.yaml y 15 pruebas locales con SQLite. Se generó con Rust el instalador Windows x64 frontend/src-tauri/target/release/bundle/nsis/Lexio_0.1.0_x64-setup.exe (1,40 MiB), sin firma digital. Salud pública y CORS verificados; falta probar instalación, login real y comportamiento MySQL.
 - El entorno temporal backend/tests/preview_server.py nunca conecta a Railway y solo sirve para pruebas UI locales; no desplegarlo.
 
 Estas observaciones describen el punto de partida, no una arquitectura ya implementada. Actualizarlas cuando cambie el proyecto.
