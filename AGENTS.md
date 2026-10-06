@@ -47,3 +47,10 @@ Fase 2: comercialización SaaS multi-tenant. Diseñar para esta fase desde el pr
 - El entorno temporal backend/tests/preview_server.py nunca conecta a Railway y solo sirve para pruebas UI locales; no desplegarlo.
 
 Estas observaciones describen el punto de partida, no una arquitectura ya implementada. Actualizarlas cuando cambie el proyecto.
+
+## Actualización del frontend al 6 de octubre de 2026
+
+- Se refactorizó frontend/src por responsabilidades: app, components/ui, components/layout, features, hooks, services, types, utils y styles. Los módulos funcionales agrupan sus páginas, componentes y formularios; casos y reportes tienen hooks propios.
+- Las rutas HTTP y contratos de petición están centralizados en servicios por dominio; la apertura privada de archivos se comparte entre clientes y casos. Se conservan el JWT en memoria, los permisos de visualización por rol, los importes como cadenas decimales y las fechas America/Lima.
+- frontend/README.md documenta la distribución y los criterios de mantenimiento. Hay 15 pruebas frontend con API simulada y renderizado local, ejecutables con pnpm test. No requieren acceso a Railway ni nuevas dependencias.
+- El refactor se verificó con las pruebas frontend y pnpm build (TypeScript estricto y Vite). No se regeneró el instalador Windows ni se verificó un login real en Railway.
