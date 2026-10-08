@@ -43,6 +43,7 @@ def test_credit_allocation_and_overflow_rollback(setup):
             "payment_date": d.today().isoformat(),
             "amount": "1200",
             "method": "Efectivo",
+            "applications": [],
         },
     ).json()
     assert (

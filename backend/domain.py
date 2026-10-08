@@ -3,7 +3,7 @@
 import json
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, TypeVar
+from typing import Any, TypeVar, TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 import models as m
@@ -12,6 +12,8 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 T = TypeVar("T", bound=m.Entity)
+if TYPE_CHECKING:
+    from schemas import ApplyIn
 ZERO = Decimal("0.00")
 
 
@@ -235,6 +237,28 @@ def confirm(db: Session, user: m.User, item: m.Installment) -> None:
         raise HTTPException(422, "El evento todavía no cumple la condición pactada")
     item.due_date = shift(anchor, item.offset_days, item.day_basis == "lunes_viernes")
     item.confirmed_revision = event.revision
+
+
+def automatic_applications(
+    db: Session, user: m.User, service_id: int, amount: Decimal
+) -> list["ApplyIn"]:
+    from schemas import ApplyIn
+
+    # Caller locks the service before reading balances or creating the payment.
+    remaining = amount
+    result: list[ApplyIn] = []
+    for item in db.scalars(select(m.Installment).where(
+        m.Installment.tenant_id == user.tenant_id,
+        m.Installment.service_id == service_id,
+    ).order_by(m.Installment.number, m.Installment.id)):
+        balance = item.amount - paid(db, user, item.id)
+        allocation = min(remaining, max(balance, ZERO))
+        if allocation > ZERO:
+            result.append(ApplyIn(installment_id=item.id, amount=allocation))
+            remaining -= allocation
+        if remaining == ZERO:
+            break
+    return result
 
 
 def apply_payment(

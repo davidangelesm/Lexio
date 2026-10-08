@@ -629,7 +629,10 @@ def create_payment(key: int, data: s.PaymentIn, db: Db, user: Actor) -> dict[str
     )
     db.add(row)
     d.audit(db, user, row, "registrar abono")
-    d.apply_payment(db, user, row, data.applications)
+    applications = data.applications if data.applications is not None else d.automatic_applications(
+        db, user, key, row.amount
+    )
+    d.apply_payment(db, user, row, applications)
     d.save(db)
     return d.public(row)
 
@@ -677,11 +680,7 @@ def payment_proposal(key: int, db: Db, user: Actor) -> list[dict[str, Any]]:
     ]
     return sorted(
         [x for x in result if x["balance"] > 0],
-        key=lambda x: (
-            x["due_date"] is None or x["due_date"] > d.today(),
-            x["due_date"] or date.max,
-            x["number"],
-        ),
+        key=lambda x: (x["number"], x["id"]),
     )
 
 

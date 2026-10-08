@@ -184,7 +184,8 @@ class PaymentIn(Input):
     method: str = Field(min_length=1, max_length=50)
     receipt: str = Field(default="", max_length=250)
     observation: str = Field(default="", max_length=10000)
-    applications: list[ApplyIn] = Field(default_factory=list, max_length=100)
+    # Omitted/null uses automatic allocation; an explicit list is a manual override.
+    applications: list[ApplyIn] | None = Field(default=None, max_length=100)
 
     @field_validator("payment_date")
     @classmethod
