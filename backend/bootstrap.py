@@ -21,8 +21,8 @@ def main() -> None:
     parser.add_argument("--username", required=True, help="Nombre de usuario de David")
     parser.add_argument("--admin-name", default="David")
     args = parser.parse_args()
-    password = getpass("Contraseña del administrador (mínimo 12 caracteres): ")
-    if len(password) < 12 or password != getpass("Repetir contraseña: "):
+    password = getpass("Contraseña del administrador (mínimo 6 caracteres): ")
+    if len(password) < 6 or password != getpass("Repetir contraseña: "):
         raise SystemExit(
             "Contraseña corta o confirmación distinta. No se hizo ningún cambio."
         )
@@ -32,7 +32,7 @@ def main() -> None:
         raise SystemExit(
             "Nombre obligatorio; usuario de 3 a 50 caracteres (letras sin tildes, "
             "números, punto, guion o guion bajo, comenzando con letra o número); "
-            "contraseña de 12 a 128 caracteres. No se hizo ningún cambio."
+            "contraseña de 6 a 128 caracteres. No se hizo ningún cambio."
         ) from None
     with Session(build_engine()) as db:
         if db.scalar(select(User.id).where(User.username == account.username)):

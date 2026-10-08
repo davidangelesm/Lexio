@@ -1,6 +1,7 @@
 import models as m
 import pytest
 from sqlalchemy.orm import Session
+from rename_admin import rename_admin
 
 
 def account(username: str) -> dict:
@@ -71,6 +72,7 @@ def test_rename_preserves_account_and_enforces_isolation(setup):
     assert client.post(
         "/auth/login", json={"username": "abogado", "password": "password-test-123"}
     ).status_code == 401
+
     assert client.post(
         "/auth/login", json={"username": "nuevo.abogado", "password": "password-test-123"}
     ).json()["user"]["id"] == ids[1]
@@ -81,3 +83,44 @@ def test_rename_preserves_account_and_enforces_isolation(setup):
     assert client.post(
         "/auth/login", json={"username": "nuevo.abogado", "password": "password-test-123"}
     ).status_code == 401
+
+
+def test_admin_rename_preserves_password_role_and_tenant(setup):
+    client, _, ids, engine = setup
+    with Session(engine) as db:
+        original = db.get(m.User, ids[0])
+        original_values = (original.password_hash, original.role, original.tenant_id)
+        rename_admin(db, "david", "Admin")
+        changed = db.get(m.User, ids[0])
+        assert changed.username == "admin"
+        assert (changed.password_hash, changed.role, changed.tenant_id) == original_values
+    response = client.post(
+        "/auth/login", json={"username": "Admin", "password": "password-test-123"}
+    )
+    assert response.status_code == 200
+    assert response.json()["user"]["id"] == ids[0]
+
+
+def test_password_minimum_for_creation_and_update(setup):
+    client, headers, _, _ = setup
+    assert client.post(
+        "/users", headers=headers[0], json={**account("asistente"), "password": "abc12"}
+    ).status_code == 422
+    created = client.post(
+        "/users", headers=headers[0], json={**account("asistente"), "password": "abc123"}
+    )
+    assert created.status_code == 201
+    url = f"/users/{created.json()['id']}"
+    data = {
+        "username": "asistente",
+        "name": "Asistente",
+        "active": True,
+        "can_create_clients": False,
+        "can_create_cases": False,
+        "password": "xyz12",
+    }
+    assert client.put(url, headers=headers[0], json=data).status_code == 422
+    assert client.put(url, headers=headers[0], json={**data, "password": "xyz123"}).status_code == 200
+    assert client.post(
+        "/auth/login", json={"username": "asistente", "password": "xyz123"}
+    ).status_code == 200

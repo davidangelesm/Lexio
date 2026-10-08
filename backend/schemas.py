@@ -37,7 +37,7 @@ class Login(Input):
 class UserIn(Input):
     name: str = Field(min_length=1, max_length=150)
     username: Username
-    password: Password = Field(min_length=12, max_length=128)
+    password: Password = Field(min_length=6, max_length=128)
     can_create_clients: bool = False
     can_create_cases: bool = False
 
@@ -48,7 +48,7 @@ class UserUpdate(Input):
     active: bool
     can_create_clients: bool
     can_create_cases: bool
-    password: Password | None = Field(default=None, min_length=12, max_length=128)
+    password: Password | None = Field(default=None, min_length=6, max_length=128)
 
 
 class ClientIn(Input):
