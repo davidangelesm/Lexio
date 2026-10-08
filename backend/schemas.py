@@ -13,6 +13,16 @@ from pydantic import (
 )
 
 Password = Annotated[str, StringConstraints(strip_whitespace=False)]
+Username = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        to_lower=True,
+        min_length=3,
+        max_length=50,
+        pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+    ),
+]
 
 
 class Input(BaseModel):
@@ -20,19 +30,20 @@ class Input(BaseModel):
 
 
 class Login(Input):
-    email: str = Field(min_length=3, max_length=254)
+    username: Username
     password: Password = Field(min_length=1, max_length=256)
 
 
 class UserIn(Input):
     name: str = Field(min_length=1, max_length=150)
-    email: str = Field(min_length=3, max_length=254)
+    username: Username
     password: Password = Field(min_length=12, max_length=128)
     can_create_clients: bool = False
     can_create_cases: bool = False
 
 
 class UserUpdate(Input):
+    username: Username
     name: str = Field(min_length=1, max_length=150)
     active: bool
     can_create_clients: bool

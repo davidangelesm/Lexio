@@ -32,10 +32,10 @@ def health() -> dict[str, str]:
 
 @app.post("/auth/login")
 def login(data: s.Login, db: Db) -> dict[str, Any]:
-    # Only pre-tenant query: email is a globally unique login identity, never supplied tenant_id.
+    # Only pre-tenant query: username is globally unique, never supplied tenant_id.
     user = db.scalar(
         select(m.User).where(
-            m.User.email == data.email.lower(), m.User.active.is_(True)
+            m.User.username == data.username, m.User.active.is_(True)
         )
     )
     dummy = "$argon2id$v=19$m=65536,t=3,p=4$YWJjZGVmZ2hpamtsbW5vcA$wuHiHEU1PVLTqr1CjKOcoahMfreGtLdihckAyHJ68N4"
@@ -54,7 +54,7 @@ def me(user: Actor) -> dict[str, Any]:
 def users(db: Db, user: Actor) -> list[dict[str, Any]]:
     data = d.rows(db, m.User, user)
     return [
-        d.public(x, {"email", "can_create_clients", "can_create_cases"})
+        d.public(x, {"username", "can_create_clients", "can_create_cases"})
         if user.role != "admin"
         else d.public(x)
         for x in data
@@ -67,7 +67,7 @@ def create_user(data: s.UserIn, db: Db, user: Actor) -> dict[str, Any]:
     row = m.User(
         tenant_id=user.tenant_id,
         name=data.name,
-        email=data.email.lower(),
+        username=data.username,
         password_hash=passwords.hash(data.password),
         role="staff",
         can_create_clients=data.can_create_clients,
@@ -79,7 +79,7 @@ def create_user(data: s.UserIn, db: Db, user: Actor) -> dict[str, Any]:
         d.save(db)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(409, "Correo ya registrado") from None
+        raise HTTPException(409, "Nombre de usuario ya registrado") from None
     return d.public(row)
 
 
@@ -96,8 +96,12 @@ def update_user(key: int, data: s.UserUpdate, db: Db, user: Actor) -> dict[str, 
         setattr(row, name, value)
     if data.password:
         row.password_hash = passwords.hash(data.password)
-    d.audit(db, user, row, "actualizar usuario", before)
-    d.save(db)
+    try:
+        d.audit(db, user, row, "actualizar usuario", before)
+        d.save(db)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Nombre de usuario ya registrado") from None
     return d.public(row)
 
 

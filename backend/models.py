@@ -50,10 +50,10 @@ class User(Entity, Base):
     __tablename__ = "lexio_users"
     __table_args__ = (
         UniqueConstraint("tenant_id", "id"),
-        UniqueConstraint("email"),
+        UniqueConstraint("username"),
     )
     name: Mapped[str] = mapped_column(String(150))
-    email: Mapped[str] = mapped_column(String(254))
+    username: Mapped[str] = mapped_column(String(50))
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20), default="staff")
     active: Mapped[bool] = mapped_column(default=True)

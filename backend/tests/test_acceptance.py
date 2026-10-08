@@ -323,13 +323,13 @@ def test_login_and_health(setup):
     assert (
         client.post(
             "/auth/login",
-            json={"email": "david@test.pe", "password": "password-test-123"},
+            json={"username": "david", "password": "password-test-123"},
         ).status_code
         == 200
     )
     assert (
         client.post(
-            "/auth/login", json={"email": "nobody@test.pe", "password": "wrong"}
+            "/auth/login", json={"username": "nadie", "password": "wrong"}
         ).status_code
         == 401
     )

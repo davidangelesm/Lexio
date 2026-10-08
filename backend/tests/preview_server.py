@@ -37,7 +37,7 @@ def main() -> None:
             User(
                 tenant_id=tenant.tenant_id,
                 name="David (prueba)",
-                email="preview@lexio.test",
+                username="preview",
                 password_hash=passwords.hash("lexio-preview-only"),
                 role="admin",
                 can_create_clients=True,
@@ -51,7 +51,7 @@ def main() -> None:
             yield db
 
     app.dependency_overrides[get_db] = sessions
-    print("ENTORNO TEMPORAL LOCAL: preview@lexio.test / lexio-preview-only")
+    print("ENTORNO TEMPORAL LOCAL: preview / lexio-preview-only")
     try:
         uvicorn.run(app, host="127.0.0.1", port=8000)
     finally:
