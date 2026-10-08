@@ -32,26 +32,30 @@ export default function LoginPage({ setActor }: Props) {
           <p className="eyebrow">Bienvenido a Lexio</p>
           <h2>Ingresa a tu estudio</h2>
           <p className="muted text-sm mb-8">
-            Usa tu correo y contraseña individual.
+            Usa tu usuario y contraseña individual.
           </p>
           <Form
             label="Ingresar"
             submit={async (f) => {
               const result = await authService.login({
-                email: str(f, "email"),
+                username: str(f, "username"),
                 password: str(f, "password"),
               });
               setToken(result.access_token);
               setActor(result.user);
             }}
           >
-            <Field label="Correo">
+            <Field label="Usuario">
               <input
-                type="email"
-                name="email"
+                type="text"
+                name="username"
                 autoComplete="username"
                 required
-                placeholder="tu@estudio.pe"
+                autoCapitalize="none"
+                spellCheck={false}
+                minLength={3}
+                maxLength={50}
+                placeholder="david"
               />
             </Field>
             <Field label="Contraseña">

@@ -14,7 +14,10 @@ export default function AlertsPage({ busy, load, alertTable, alerts }: Props) {
         <div>
           <p className="eyebrow">Seguimiento del estudio</p>
           <h1>Centro de alertas</h1>
-          <p>Leer un aviso no resuelve la tarea ni cancela la deuda.</p>
+          <p>
+            Leído descarta un aviso. Atendido completa la tarea y retira sus
+            alertas. Las tareas pendientes después del vencimiento son urgentes.
+          </p>
         </div>
         <button
           className="secondary"

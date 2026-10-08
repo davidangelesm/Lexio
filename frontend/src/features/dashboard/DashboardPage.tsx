@@ -43,7 +43,7 @@ export default function DashboardPage({
           <p className="eyebrow">Tu jornada en perspectiva</p>
           <h1>Panel del día</h1>
           <p>
-            Hola, {actor.name.split(" ")[0]}. Estas son las prioridades de tu
+            Hola, {actor.name.split(" ")[0]}. Estas son las prioridades del
             estudio.
           </p>
         </div>

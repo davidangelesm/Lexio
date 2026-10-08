@@ -97,12 +97,13 @@ export default function CaseWorkspace({
       </button>
       <div className="page-head">
         <div>
+          <h1>{caseData.client.name}</h1>
+          <h2>{caseData.subject}</h2>
           <p className="eyebrow">
             {caseData.client.code} · {caseData.code}
           </p>
-          <h1>{caseData.subject}</h1>
           <p>
-            {caseData.client.name} · {caseData.area} · {caseData.current_stage}
+            {caseData.area} · {caseData.current_stage}
           </p>
         </div>
         <div className="actions">

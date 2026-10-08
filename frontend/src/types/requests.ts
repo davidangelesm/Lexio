@@ -3,6 +3,7 @@ export interface NoticeSettingsInput {
 }
 
 export interface UserUpdateInput {
+  username: string;
   active: boolean;
   password: string | null;
   name: string;
@@ -11,7 +12,7 @@ export interface UserUpdateInput {
 }
 
 export interface UserInput {
-  email: string;
+  username: string;
   password: string;
   name: string;
   can_create_clients: boolean;
@@ -19,7 +20,7 @@ export interface UserInput {
 }
 
 export interface LoginInput {
-  email: string;
+  username: string;
   password: string;
 }
 

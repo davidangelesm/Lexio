@@ -52,7 +52,7 @@ export default function TaskForm({
       </Field>
       <Field label="Estado">
         <select name="status" defaultValue={editTask?.status || "pendiente"}>
-          {["pendiente", "atendida", "cancelada"].map((x) => (
+          {["pendiente", "atendido", "cancelada"].map((x) => (
             <option key={x}>{x}</option>
           ))}
         </select>

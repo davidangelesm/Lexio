@@ -36,7 +36,7 @@ export function useLexio() {
   const [fileClient, setFileClient] = useState<Client>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [noticeDays, setNoticeDays] = useState<number[]>([3, 1]);
+  const [noticeDays, setNoticeDays] = useState<number[]>([5, 3, 1]);
   const isAdmin = actor?.role === "admin";
   function logout() {
     setToken("");

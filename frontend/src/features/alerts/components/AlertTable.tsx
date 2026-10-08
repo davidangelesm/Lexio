@@ -35,7 +35,7 @@ export default function AlertTable({
         </thead>
         <tbody>
           {data.map((x) => (
-            <tr key={x.id}>
+            <tr key={x.id} className={x.urgent ? "alert-urgent" : undefined}>
               <td>
                 <button
                   className="link-button"
@@ -56,24 +56,42 @@ export default function AlertTable({
               {isAdmin && <td>{x.amount ? money(x.amount) : "—"}</td>}
               <td>
                 <Badge>{x.label}</Badge>
-                {x.read_at && <small>Leído</small>}
               </td>
               <td>
-                <button
-                  className="link-button"
-                  disabled={busy}
-                  onClick={async () => {
-                    setError("");
-                    try {
-                      await alertsService.read(x.id);
-                      await load();
-                    } catch (e) {
-                      setError(e instanceof Error ? e.message : "Error");
-                    }
-                  }}
-                >
-                  Leer
-                </button>
+                {!x.urgent && (
+                  <button
+                    className="link-button"
+                    disabled={busy}
+                    onClick={async () => {
+                      setError("");
+                      try {
+                        await alertsService.read(x.id);
+                        await load();
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : "Error");
+                      }
+                    }}
+                  >
+                    Marcar leído
+                  </button>
+                )}
+                {x.can_attend && (
+                  <button
+                    className="link-button"
+                    disabled={busy}
+                    onClick={async () => {
+                      setError("");
+                      try {
+                        await alertsService.attend(x.id);
+                        await load();
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : "Error");
+                      }
+                    }}
+                  >
+                    Marcar atendido
+                  </button>
+                )}
               </td>
             </tr>
           ))}

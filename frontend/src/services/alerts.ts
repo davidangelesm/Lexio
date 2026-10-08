@@ -8,4 +8,7 @@ export const alertsService = {
   read(id: number): Promise<unknown> {
     return api<unknown>(`/alerts/${id}/read`, "POST");
   },
+  attend(id: number): Promise<unknown> {
+    return api<unknown>(`/alerts/${id}/attend`, "POST");
+  },
 };

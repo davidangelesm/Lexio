@@ -15,6 +15,8 @@ export interface Alert {
   amount: string | null;
   label: string;
   provisional: boolean;
+  urgent: boolean;
+  can_attend: boolean;
 }
 export interface Dashboard {
   date: string;

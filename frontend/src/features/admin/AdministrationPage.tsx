@@ -51,7 +51,7 @@ export default function AdministrationPage({
           <table>
             <thead>
               <tr>
-                <th>Nombre / correo</th>
+                <th>Nombre / usuario</th>
                 <th>Rol</th>
                 <th>Crear clientes</th>
                 <th>Crear casos</th>
@@ -64,7 +64,7 @@ export default function AdministrationPage({
                 <tr key={x.id}>
                   <td>
                     {x.name}
-                    <small>{x.email}</small>
+                    <small>{x.username}</small>
                   </td>
                   <td>{x.role}</td>
                   <td>{x.can_create_clients ? "Sí" : "No"}</td>
@@ -94,7 +94,7 @@ export default function AdministrationPage({
         <Form
           submit={async (f) => {
             await administrationService.updateNoticeSettings({
-              days: [num(f, "first"), num(f, "second")],
+              days: [num(f, "first"), num(f, "second"), num(f, "third")],
             });
             await load();
           }}
@@ -105,7 +105,7 @@ export default function AdministrationPage({
               type="number"
               min="1"
               max="60"
-              defaultValue={noticeDays[0]}
+              defaultValue={noticeDays[0] ?? 5}
               required
             />
           </Field>
@@ -115,7 +115,17 @@ export default function AdministrationPage({
               type="number"
               min="1"
               max="60"
-              defaultValue={noticeDays[1]}
+              defaultValue={noticeDays[1] ?? 3}
+              required
+            />
+          </Field>
+          <Field label="Tercer aviso">
+            <input
+              name="third"
+              type="number"
+              min="1"
+              max="60"
+              defaultValue={noticeDays[2] ?? 1}
               required
             />
           </Field>

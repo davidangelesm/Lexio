@@ -269,6 +269,14 @@
     font-size: 11px;
     white-space: nowrap;
   }
+  .alert-urgent {
+    background: #fff5f5;
+  }
+  .alert-urgent .badge {
+    color: #9b1c1c;
+    background: #fee2e2;
+    font-weight: 600;
+  }
   .empty {
     padding: 40px 20px;
     color: #84908a;

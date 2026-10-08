@@ -5,6 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api, setToken } from "../src/services/http.ts";
 import { authService } from "../src/services/auth.ts";
+import { alertsService } from "../src/services/alerts.ts";
 import { clientsService } from "../src/services/clients.ts";
 import { casesService } from "../src/services/cases.ts";
 import { financeService } from "../src/services/finance.ts";
@@ -15,6 +16,7 @@ import AppShell from "../src/components/layout/AppShell.tsx";
 import AlertTable from "../src/features/alerts/components/AlertTable.tsx";
 import CaseServices from "../src/features/cases/components/CaseServices.tsx";
 import ResponsibleSelect from "../src/features/cases/components/ResponsibleSelect.tsx";
+import UserForm from "../src/features/admin/forms/UserForm.tsx";
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -50,7 +52,7 @@ test("login usa el endpoint y las credenciales originales", async () => {
   const calls = capture(result);
   assert.deepEqual(
     await authService.login({
-      email: "test@example.test",
+      username: "david",
       password: "fixture",
     }),
     result,
@@ -58,6 +60,10 @@ test("login usa el endpoint y las credenciales originales", async () => {
   assert.equal(calls[0].url, "https://lexio.test/auth/login");
   assert.equal(calls[0].method, "POST");
   assert.equal(calls[0].headers.Authorization, undefined);
+  assert.deepEqual(JSON.parse(calls[0].body), {
+    username: "david",
+    password: "fixture",
+  });
 });
 test("401 invalida el token y comunica expiración de sesión", async () => {
   const events = [];
@@ -74,10 +80,10 @@ test("401 invalida el token y comunica expiración de sesión", async () => {
 test("errores Pydantic mantienen campo y mensaje", async () => {
   globalThis.fetch = async () =>
     Response.json(
-      { detail: [{ loc: ["body", "email"], msg: "Correo inválido" }] },
+      { detail: [{ loc: ["body", "username"], msg: "Usuario inválido" }] },
       { status: 422 },
     );
-  await assert.rejects(api("/auth/login"), /email: Correo inválido/);
+  await assert.rejects(api("/auth/login"), /username: Usuario inválido/);
 });
 test("filtros omiten valores vacíos y codifican caracteres", async () => {
   const calls = capture([]);
@@ -198,6 +204,8 @@ test("la aplicación inicia en login y monta el elemento existente", async () =>
   const html = renderToStaticMarkup(createElement(App));
   assert.match(html, /Ingresa a tu estudio/);
   assert.match(html, /name="password"/);
+  assert.match(html, /name="username"/);
+  assert.doesNotMatch(html, /type="email"|name="email"/);
   const entry = await readFile(
     new URL("../src/main.tsx", import.meta.url),
     "utf8",
@@ -208,6 +216,31 @@ test("la aplicación inicia en login y monta el elemento existente", async () =>
   );
   const id = entry.match(/getElementById\("([^"]+)"\)/)[1];
   assert.ok(document.includes(`id="${id}"`));
+});
+
+test("administración crea y cambia el usuario de acceso", async () => {
+  const html = renderToStaticMarkup(createElement(UserForm, { done: noop }));
+  assert.match(html, /minLength="6"/i);
+  assert.match(html, /mínimo 6 caracteres/);
+  const calls = capture({});
+  const form = new FormData();
+  form.set("name", "Juan Pérez");
+  form.set("username", "juan.perez");
+  form.set("password", "password-test-123");
+  await UserForm({ done: noop }).props.submit(form);
+  assert.equal(calls[0].method, "POST");
+  assert.equal(JSON.parse(calls[0].body).username, "juan.perez");
+  assert.equal("email" in JSON.parse(calls[0].body), false);
+  form.set("username", "juan.nuevo");
+  form.set("password", "");
+  form.set("active", "on");
+  await UserForm({
+    editUser: { ...user, username: "juan.perez" },
+    done: noop,
+  }).props.submit(form);
+  assert.equal(calls[1].method, "PUT");
+  assert.equal(JSON.parse(calls[1].body).username, "juan.nuevo");
+  assert.equal(JSON.parse(calls[1].body).password, null);
 });
 test("navegación conserva administración solo para administrador", () => {
   const props = {
@@ -261,6 +294,68 @@ test("tabla de alertas oculta saldos al equipo jurídico", () => {
       createElement(AlertTable, { ...props, isAdmin: true }),
     ),
     /<th>Saldo<\/th>/,
+  );
+});
+
+test("alertas urgentes muestran atender según permiso y conservan el acceso al caso", () => {
+  const item = {
+    id: 7,
+    case_id: 42,
+    client: { name: "Cliente", code: "CL1" },
+    case_code: "CAS1",
+    description: "Presentar escrito",
+    kind: "procesal",
+    target_date: "2026-10-01",
+    responsible_id: 1,
+    amount: null,
+    label: "urgente · vencido",
+    urgent: true,
+    can_attend: true,
+  };
+  const props = {
+    data: [item],
+    isAdmin: false,
+    busy: false,
+    openCase: noop,
+    userName: noop,
+    setError: noop,
+    load: noop,
+  };
+  const html = renderToStaticMarkup(createElement(AlertTable, props));
+  assert.match(html, /alert-urgent/);
+  assert.match(html, /Marcar atendido/);
+  assert.match(html, /Cliente/);
+  assert.doesNotMatch(html, /Marcar leído/);
+  assert.doesNotMatch(
+    renderToStaticMarkup(
+      createElement(AlertTable, {
+        ...props,
+        data: [{ ...item, can_attend: false }],
+      }),
+    ),
+    /Marcar atendido/,
+  );
+  assert.match(
+    renderToStaticMarkup(
+      createElement(AlertTable, {
+        ...props,
+        data: [{ ...item, urgent: false }],
+      }),
+    ),
+    /Marcar leído/,
+  );
+});
+
+test("leer y atender alertas tienen acciones independientes", async () => {
+  const calls = capture({ ok: true });
+  await alertsService.read(7);
+  await alertsService.attend(7);
+  assert.deepEqual(
+    calls.map((call) => [new URL(call.url).pathname, call.method]),
+    [
+      ["/alerts/7/read", "POST"],
+      ["/alerts/7/attend", "POST"],
+    ],
   );
 });
 test("servicios no muestran honorarios ni acciones financieras a staff", () => {

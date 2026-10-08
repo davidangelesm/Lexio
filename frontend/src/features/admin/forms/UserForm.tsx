@@ -10,6 +10,7 @@ export default function UserForm({ editUser, done }: Props) {
       submit={async (f) => {
         const base = {
           name: str(f, "name"),
+          username: str(f, "username"),
           can_create_clients: f.has("can_create_clients"),
           can_create_cases: f.has("can_create_cases"),
         };
@@ -22,7 +23,6 @@ export default function UserForm({ editUser, done }: Props) {
         else
           await administrationService.createUser({
             ...base,
-            email: str(f, "email"),
             password: str(f, "password"),
           });
         await done();
@@ -31,22 +31,33 @@ export default function UserForm({ editUser, done }: Props) {
       <Field label="Nombre">
         <input name="name" required defaultValue={editUser?.name} />
       </Field>
-      {!editUser && (
-        <Field label="Correo de acceso">
-          <input name="email" type="email" required />
-        </Field>
-      )}
+      <Field label="Usuario de acceso">
+        <input
+          name="username"
+          type="text"
+          required
+          minLength={3}
+          maxLength={50}
+          pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]*"
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
+          defaultValue={editUser?.username}
+          placeholder="juan.perez"
+          title="De 3 a 50 caracteres: letras sin tildes, números, punto, guion o guion bajo. Comienza con letra o número."
+        />
+      </Field>
       <Field
         label={
           editUser
             ? "Nueva contraseña (opcional)"
-            : "Contraseña (mínimo 12 caracteres)"
+            : "Contraseña (mínimo 6 caracteres)"
         }
       >
         <input
           name="password"
           type="password"
-          minLength={12}
+          minLength={6}
           required={!editUser}
           autoComplete="new-password"
         />
@@ -80,6 +91,7 @@ export default function UserForm({ editUser, done }: Props) {
         )}
       </div>
       <p className="full muted text-xs">
+        El usuario no distingue mayúsculas y minúsculas. Debe ser único.{" "}
         Autoriza cada caso desde su ficha. Estos permisos no conceden acceso
         financiero.
       </p>
