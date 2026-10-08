@@ -112,3 +112,59 @@ def test_notifications_are_private_and_attended_hides_every_recipient(setup):
         assert all(x.status == "cancelado" for x in db.scalars(select(m.Notice).where(m.Notice.kind == "legal")))
     assert client.get("/alerts", headers=headers[1]).json() == []
     assert not any(x["kind"] == "legal" for x in client.get("/alerts", headers=headers[0]).json())
+
+
+def test_staff_standalone_client_then_case_preserves_visibility_and_revocation(setup):
+    client, headers, ids, engine = setup
+    with Session(engine) as db:
+        user = db.get(m.User, ids[1])
+        user.can_create_clients = True
+        user.can_create_cases = True
+        db.commit()
+    colleague = client.post("/users", headers=headers[0], json={
+        "username": "colega", "name": "Otra abogada", "password": "abc123",
+        "can_create_clients": True, "can_create_cases": True,
+    })
+    assert colleague.status_code == 201
+    login = client.post("/auth/login", json={"username": "colega", "password": "abc123"})
+    colleague_header = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    other_client = client.post("/clients", headers=headers[0], json={**ficha()["client"], "document_number": "88888888"}).json()
+    foreign_client = client.post("/clients", headers=headers[2], json={**ficha()["client"], "document_number": "77777777"}).json()
+    registered = client.post("/clients", headers=headers[1], json=ficha()["client"])
+    assert registered.status_code == 201
+    own_client = registered.json()
+    assert [x["id"] for x in client.get("/clients", headers=headers[1]).json()] == [own_client["id"]]
+    assert client.get("/clients", headers=colleague_header).json() == []
+    data = {"client_id": own_client["id"], "area": "Civil", "process_type": "Cobro de deuda", "initial_stage": "Demanda"}
+    assert client.post("/cases", headers=colleague_header, json=data).status_code == 404
+    for hidden in (other_client, foreign_client):
+        assert client.post("/cases", headers=headers[1], json={**data, "client_id": hidden["id"]}).status_code == 404
+    created = client.post("/cases", headers=headers[1], json=data)
+    assert created.status_code == 201, created.text
+    case = created.json()
+    assert case["client"]["id"] == own_client["id"] and "fee" not in case
+    assert case["responsible_id"] == ids[1]
+    assert [x["id"] for x in client.get("/clients", headers=headers[1]).json()] == [own_client["id"]]
+    assert client.get("/clients", headers=colleague_header).json() == []
+    # La auditoría de creación no puede recuperar acceso después de una revocación.
+    assert client.put(f"/cases/{case['id']}", headers=headers[0], json={"responsible_id": ids[0]}).status_code == 200
+    assert client.delete(f"/cases/{case['id']}/access/{ids[1]}", headers=headers[0]).status_code == 200
+    assert client.get("/clients", headers=headers[1]).json() == []
+    assert client.get("/cases", headers=headers[1]).json() == []
+    assert client.post("/cases", headers=headers[1], json=data).status_code == 404
+
+
+def test_old_client_creation_audit_cannot_grant_access_to_reused_id(setup):
+    from datetime import timedelta
+
+    client, headers, ids, engine = setup
+    current = client.post("/clients", headers=headers[0], json=ficha()["client"]).json()
+    with Session(engine) as db:
+        customer = db.get(m.Client, current["id"])
+        db.add(m.Audit(
+            tenant_id=customer.tenant_id, user_id=ids[1], resource=m.Client.__tablename__,
+            resource_id=customer.id, action="Registrar cliente", changes="{}",
+            created_at=customer.created_at - timedelta(days=1),
+        ))
+        db.commit()
+    assert client.get("/clients", headers=headers[1]).json() == []

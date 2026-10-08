@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from typing import Any
 
 import domain as d
@@ -9,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from routing import ExactMoneyRoute
 from security import Actor, Db, admin, passwords, token
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 app = FastAPI(title="Lexio", version="0.2.0")
@@ -85,7 +86,15 @@ def visible_clients(db: Db, user: m.User):
     query = select(m.Client).where(m.Client.tenant_id == user.tenant_id)
     if user.role != "admin":
         case_ids = [x.client_id for x in db.scalars(d.case_scope(db, user))]
-        query = query.where(m.Client.id.in_(case_ids))
+        no_case = ~select(m.Case.id).where(
+            m.Case.tenant_id == user.tenant_id, m.Case.client_id == m.Client.id,
+        ).exists()
+        own_creation = select(m.Audit.id).where(
+            m.Audit.tenant_id == user.tenant_id, m.Audit.user_id == user.id,
+            m.Audit.resource == m.Client.__tablename__, m.Audit.resource_id == m.Client.id,
+            m.Audit.action == "Registrar cliente", m.Audit.created_at >= m.Client.created_at,
+        ).exists()
+        query = query.where(m.Client.id.in_(case_ids) | (no_case & own_creation))
     return query
 
 
@@ -142,7 +151,7 @@ def cases(db: Db, user: Actor, search: str = "", client_id: int | None = None, a
 @app.post("/cases", status_code=201)
 def create_case(data: s.CaseIn, db: Db, user: Actor) -> dict[str, Any]:
     if user.role != "admin" and not user.can_create_cases:
-        raise HTTPException(403, "No tiene permiso para registrar fichas")
+        raise HTTPException(403, "No tiene permiso para registrar casos")
     if user.role != "admin" and ({"fee", "installments"} & data.model_fields_set):
         raise HTTPException(403, "Los honorarios los registra el administrador financiero")
     if user.role == "admin":
@@ -167,7 +176,7 @@ def create_case(data: s.CaseIn, db: Db, user: Actor) -> dict[str, Any]:
         **data.model_dump(exclude={"client", "client_id", "responsible_id", "installments"}),
     )
     db.add(row)
-    d.audit(db, user, row, "Registrar ficha")
+    d.audit(db, user, row, "Registrar caso")
     for uid in {user.id, target.id}:
         db.add(m.Access(tenant_id=user.tenant_id, case_id=row.id, user_id=uid, level="edit"))
     for number, item in enumerate(data.installments or [], 1):
@@ -235,7 +244,7 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
         row.fee = fee
     for name, value in data.model_dump(exclude={"client", "fee", "installments"}, exclude_none=True).items():
         setattr(row, name, value)
-    d.audit(db, user, row, "Actualizar ficha", before)
+    d.audit(db, user, row, "Actualizar caso", before)
     d.save(db)
     return d.case_view(db, user, row)
 
@@ -470,6 +479,45 @@ def reports(db: Db, user: Actor) -> dict[str, Any]:
         fields += ["fee", "paid", "balance"]
     totals = {field: sum((r[field] for r in groups.values()), d.ZERO if field in ("fee", "paid", "balance") else 0) for field in fields}
     return {"rows": sorted(groups.values(), key=lambda x: x["area"]), "totals": totals}
+
+
+@app.get("/dashboard")
+def dashboard(db: Db, user: Actor) -> dict[str, Any]:
+    cases = {x.id: x for x in db.scalars(d.case_scope(db, user))}
+    result: dict[str, Any] = {"counts": {
+        "total_cases": len(cases),
+        "active_cases": sum(x.status == "activo" for x in cases.values()),
+        "concluded_cases": sum(x.status == "concluido" for x in cases.values()),
+        "pending_legal_alerts": db.scalar(select(func.count(m.Entry.id)).where(
+            m.Entry.tenant_id == user.tenant_id, m.Entry.case_id.in_(cases),
+            m.Entry.alert_date.is_not(None), m.Entry.attended.is_(False),
+        )),
+    }}
+    if user.role == "admin":
+        fee = sum((case.fee or d.ZERO for case in cases.values()), d.ZERO)
+        received = sum((p.amount for case in cases.values() for p in d.payments(db, user, case.id)), d.ZERO)
+        result["finance"] = {"fee": fee, "paid": received, "balance": fee - received}
+        result["upcoming_payments"] = []
+        query = select(m.Installment).where(
+            m.Installment.tenant_id == user.tenant_id,
+            m.Installment.case_id.in_(cases), m.Installment.due_date <= d.today() + timedelta(days=30),
+        ).order_by(m.Installment.due_date, m.Installment.id)
+        for item in db.scalars(query):
+            paid = d.paid(db, user, item.id)
+            if item.amount == paid:
+                continue
+            case = cases[item.case_id]
+            client = d.get(db, m.Client, case.client_id, user)
+            result["upcoming_payments"].append({
+                "id": item.id, "case_id": case.id, "process_type": case.process_type,
+                "client_code": d.public(client)["code"], "client_name": client.name,
+                "number": item.number, "due_date": item.due_date,
+                "amount": item.amount, "paid": paid, "balance": item.amount - paid,
+                "responsible_name": d.get(db, m.User, case.responsible_id, user).name,
+            })
+            if len(result["upcoming_payments"]) == 10:
+                break
+    return result
 
 
 @app.get("/audit")
