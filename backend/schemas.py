@@ -2,31 +2,19 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    StringConstraints,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 Password = Annotated[str, StringConstraints(strip_whitespace=False)]
+Money = Annotated[Decimal, Field(gt=0, max_digits=14, decimal_places=2)]
 LegalArea = Literal[
     "Civil", "Penal", "Laboral", "Tributario", "Derecho corporativo",
     "Constitucional", "Familia", "Familia – Civil", "Administrativo",
     "Conciliación extrajudicial", "Fiscalía",
 ]
-Username = Annotated[
-    str,
-    StringConstraints(
-        strip_whitespace=True,
-        to_lower=True,
-        min_length=3,
-        max_length=50,
-        pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
-    ),
-]
+Username = Annotated[str, StringConstraints(
+    strip_whitespace=True, to_lower=True, min_length=3, max_length=50,
+    pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+)]
 
 
 class Input(BaseModel):
@@ -67,36 +55,44 @@ class ClientIn(Input):
     def document(self):
         if self.document_type in ("DNI", "RUC"):
             size = 8 if self.document_type == "DNI" else 11
-            if (
-                not self.document_number.isascii()
-                or not self.document_number.isdigit()
-                or len(self.document_number) != size
-            ):
+            if not self.document_number.isascii() or not self.document_number.isdigit() or len(self.document_number) != size:
                 raise ValueError(f"{self.document_type} debe tener {size} dígitos")
         return self
 
 
+class InstallmentIn(Input):
+    id: int | None = Field(default=None, gt=0)
+    amount: Money
+    due_date: date
+
+
 class CaseIn(Input):
-    client_id: int = Field(gt=0)
+    client_id: int | None = Field(default=None, gt=0)
+    client: ClientIn | None = None
     area: LegalArea
-    subject: str = Field(min_length=1, max_length=150)
-    description: str = Field(min_length=1, max_length=10000)
+    process_type: str = Field(min_length=1, max_length=150)
     initial_stage: str = Field(min_length=1, max_length=100)
-    current_stage: str = Field(min_length=1, max_length=100)
-    status: Literal["activo", "suspendido", "concluido"] = "activo"
-    start_date: date
-    responsible_id: int = Field(gt=0)
-    reference: str = Field(default="", max_length=120)
+    status: Literal["activo", "concluido"] = "activo"
+    responsible_id: int | None = Field(default=None, gt=0)
+    fee: Money | None = None
+    installments: list[InstallmentIn] | None = Field(default=None, min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def client_source(self):
+        if (self.client_id is None) == (self.client is None):
+            raise ValueError("Selecciona un cliente existente o registra sus datos")
+        return self
 
 
 class CaseUpdate(Input):
-    area: LegalArea
-    subject: str = Field(min_length=1, max_length=150)
-    description: str = Field(min_length=1, max_length=10000)
-    current_stage: str = Field(min_length=1, max_length=100)
-    status: Literal["activo", "suspendido", "concluido"]
-    responsible_id: int = Field(gt=0)
-    reference: str = Field(default="", max_length=120)
+    client: ClientIn | None = None
+    area: LegalArea | None = None
+    process_type: str | None = Field(default=None, min_length=1, max_length=150)
+    initial_stage: str | None = Field(default=None, min_length=1, max_length=100)
+    status: Literal["activo", "concluido"] | None = None
+    responsible_id: int | None = Field(default=None, gt=0)
+    fee: Money | None = None
+    installments: list[InstallmentIn] | None = Field(default=None, min_length=1, max_length=100)
 
 
 class Grant(Input):
@@ -107,119 +103,19 @@ class Grant(Input):
 class EntryIn(Input):
     action_date: date
     description: str = Field(min_length=1, max_length=10000)
-    is_payment_event: bool = False
-
-
-class TaskIn(Input):
-    entry_id: int | None = Field(default=None, gt=0)
-    description: str = Field(min_length=1, max_length=250)
-    responsible_id: int = Field(gt=0)
-    due_date: date
-    status: Literal["pendiente", "atendido", "atendida", "cancelada"] = "pendiente"
-
-    @field_validator("status")
-    @classmethod
-    def normalize_status(cls, value: str) -> str:
-        return "atendido" if value == "atendida" else value
-
-
-class EventIn(Input):
-    entry_id: int | None = Field(default=None, gt=0)
-    description: str = Field(min_length=1, max_length=250)
-    scheduled_date: date | None = None
-    effective_date: date | None = None
-    effective_kind: Literal["realizacion", "emision", "notificacion"] | None = None
-
-    @model_validator(mode="after")
-    def effective(self):
-        if bool(self.effective_date) != bool(self.effective_kind):
-            raise ValueError(
-                "Fecha efectiva y condición efectiva deben registrarse juntas"
-            )
-        return self
-
-
-class InstallmentIn(Input):
-    amount: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
-    percentage: Decimal | None = Field(default=None, gt=0, le=100, decimal_places=4)
-    condition: Literal[
-        "fecha", "programacion", "realizacion", "emision", "notificacion"
-    ]
-    due_date: date | None = None
-    event_id: int | None = Field(default=None, gt=0)
-    offset_days: int = Field(default=0, ge=-3650, le=3650)
-    day_basis: Literal["calendario", "lunes_viernes"] = "calendario"
-
-    @model_validator(mode="after")
-    def valid_condition(self):
-        if (self.amount is None) == (self.percentage is None):
-            raise ValueError("Indica monto o porcentaje, exclusivamente")
-        if self.condition == "fecha":
-            if self.due_date is None or self.event_id is not None:
-                raise ValueError("Cuota por fecha requiere fecha y no evento")
-        elif self.event_id is None or self.due_date is not None:
-            raise ValueError(
-                "Cuota por evento requiere evento; su fecha se confirma después"
-            )
-        return self
-
-
-class ServiceIn(Input):
-    mode: Literal["etapa", "acto", "integral", "otro"]
-    scope: str = Field(min_length=1, max_length=10000)
-    stage: str = Field(min_length=1, max_length=120)
-    contract_date: date
-    fee: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
-    installments: list[InstallmentIn] = Field(min_length=1, max_length=100)
-
-
-class ApplyIn(Input):
-    installment_id: int = Field(gt=0)
-    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    alert_date: date | None = None
 
 
 class PaymentIn(Input):
     payment_date: date
-    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
-    method: str = Field(min_length=1, max_length=50)
-    receipt: str = Field(default="", max_length=250)
-    observation: str = Field(default="", max_length=10000)
-    # Omitted/null uses automatic allocation; an explicit list is a manual override.
-    applications: list[ApplyIn] | None = Field(default=None, max_length=100)
+    amount: Money
+    method: str = Field(default="", max_length=50)
+    installment_id: int | None = Field(default=None, gt=0)
 
     @field_validator("payment_date")
     @classmethod
     def not_future(cls, value: date) -> date:
         from domain import today
-
         if value > today():
             raise ValueError("El abono no puede tener fecha futura")
         return value
-
-
-class ApplyList(Input):
-    applications: list[ApplyIn] = Field(min_length=1, max_length=100)
-
-
-class Reason(Input):
-    reason: str = Field(min_length=5, max_length=2000)
-
-
-class Reschedule(Input):
-    due_date: date
-    reason: str = Field(min_length=5, max_length=2000)
-
-
-class LinkEvent(Input):
-    event_id: int = Field(gt=0)
-
-
-class NoticeSettings(Input):
-    days: list[int] = Field(min_length=3, max_length=3)
-
-    @field_validator("days")
-    @classmethod
-    def valid_days(cls, value: list[int]) -> list[int]:
-        if len(set(value)) != 3 or any(x < 1 or x > 60 for x in value):
-            raise ValueError("Define tres anticipaciones distintas entre 1 y 60 días")
-        return sorted(value, reverse=True)

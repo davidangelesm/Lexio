@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,12 @@ from main import app
 from security import passwords, token
 
 from database import Base, get_db
+
+
+@pytest.fixture(autouse=True)
+def fixed_day(monkeypatch):
+    import domain
+    monkeypatch.setattr(domain, "today", lambda: date(2026, 10, 8))
 
 
 @pytest.fixture

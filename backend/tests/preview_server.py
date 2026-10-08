@@ -11,12 +11,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["JWT_SECRET"] = "local-ui-test-only-not-production-1234567890"
-os.environ["CORS_ORIGINS"] = "http://127.0.0.1:1420,http://localhost:1420"
+os.environ["CORS_ORIGINS"] = "http://127.0.0.1:1420,http://localhost:1420,http://127.0.0.1:1422"
 import uvicorn
 from main import app
 from models import Tenant, User
 from security import passwords
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 from database import Base, get_db
@@ -28,6 +28,11 @@ def main() -> None:
     engine = create_engine(
         f"sqlite:///{path}", connect_args={"check_same_thread": False}
     )
+
+    @event.listens_for(engine, "connect")
+    def foreign_keys(connection, _):
+        connection.execute("PRAGMA foreign_keys=ON")
+
     Base.metadata.create_all(engine)
     with Session(engine) as db:
         tenant = Tenant(name="Estudio de prueba local")
@@ -53,7 +58,7 @@ def main() -> None:
     app.dependency_overrides[get_db] = sessions
     print("ENTORNO TEMPORAL LOCAL: preview / lexio-preview-only")
     try:
-        uvicorn.run(app, host="127.0.0.1", port=8000)
+        uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("LEXIO_PREVIEW_PORT", "8000")))
     finally:
         engine.dispose()
         temporary.cleanup()
