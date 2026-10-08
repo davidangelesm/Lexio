@@ -37,7 +37,7 @@ def main() -> None:
     with Session(build_engine()) as db:
         if db.scalar(select(User.id).where(User.username == account.username)):
             raise SystemExit("Nombre de usuario ya registrado. No se creó otro estudio.")
-        tenant = Tenant(name=args.name, notice_days="3,1")
+        tenant = Tenant(name=args.name, notice_days="5,3,1")
         db.add(tenant)
         db.flush()
         user = User(

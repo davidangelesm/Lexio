@@ -35,7 +35,7 @@ class Tenant(Base):
         Integer, primary_key=True, autoincrement=True
     )
     name: Mapped[str] = mapped_column(String(150))
-    notice_days: Mapped[str] = mapped_column(String(30), default="3,1")
+    notice_days: Mapped[str] = mapped_column(String(30), default="5,3,1")
 
 
 class Entity:

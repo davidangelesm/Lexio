@@ -111,7 +111,12 @@ class TaskIn(Input):
     description: str = Field(min_length=1, max_length=250)
     responsible_id: int = Field(gt=0)
     due_date: date
-    status: Literal["pendiente", "atendida", "cancelada"] = "pendiente"
+    status: Literal["pendiente", "atendido", "atendida", "cancelada"] = "pendiente"
+
+    @field_validator("status")
+    @classmethod
+    def normalize_status(cls, value: str) -> str:
+        return "atendido" if value == "atendida" else value
 
 
 class FileIn(Input):
@@ -218,11 +223,11 @@ class LinkEvent(Input):
 
 
 class NoticeSettings(Input):
-    days: list[int] = Field(min_length=2, max_length=2)
+    days: list[int] = Field(min_length=3, max_length=3)
 
     @field_validator("days")
     @classmethod
     def valid_days(cls, value: list[int]) -> list[int]:
-        if len(set(value)) != 2 or any(x < 1 or x > 60 for x in value):
-            raise ValueError("Define dos anticipaciones distintas entre 1 y 60 días")
+        if len(set(value)) != 3 or any(x < 1 or x > 60 for x in value):
+            raise ValueError("Define tres anticipaciones distintas entre 1 y 60 días")
         return sorted(value, reverse=True)

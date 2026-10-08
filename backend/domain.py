@@ -86,6 +86,8 @@ def public(item: m.Entity, exclude: set[str] | None = None) -> dict[str, Any]:
         data["code"] = f"CAS-{item.id:06d}"
     if isinstance(item, m.Client):
         data["code"] = f"{item.document_type}-{item.document_number}"
+    if isinstance(item, m.Task) and data["status"] == "atendida":
+        data["status"] = "atendido"
     return data
 
 

@@ -245,7 +245,7 @@ def test_alerts_weekdays_idempotent_and_read_not_resolution(setup):
     assert len(data) == 1
     assert client.get("/alerts", headers=headers[0]).json()[0]["id"] == data[0]["id"]
     client.post(f"/alerts/{data[0]['id']}/read", headers=headers[0])
-    assert len(client.get("/alerts", headers=headers[0]).json()) == 1
+    assert client.get("/alerts", headers=headers[0]).json() == []
     client.put(
         root + f"/tasks/{created['id']}",
         headers=headers[0],

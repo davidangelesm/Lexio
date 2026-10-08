@@ -800,6 +800,13 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
     # Serialize notice regeneration per recipient; no cron/network notifications in this version.
     d.get(db, m.User, user.id, user, lock=True)
     cases = {x.id: x for x in db.scalars(d.case_scope(db, user))}
+    editable = set(cases) if user.role == "admin" else set(
+        db.scalars(select(m.Access.case_id).where(
+            m.Access.tenant_id == user.tenant_id,
+            m.Access.user_id == user.id,
+            m.Access.level == "edit",
+        ))
+    )
     settings = notice_settings(db, user)["days"]
     sources: list[dict[str, Any]] = []
     for task in db.scalars(
@@ -860,6 +867,7 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
     result = []
     for source in sources:
         target = source["target"]
+        urgent = target < d.today() and not source["provisional"]
         schedule = [(n, d.shift(target, -n)) for n in settings]
         schedule.append((0, target))
         for anticipation, notice_date in schedule:
@@ -886,10 +894,15 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
                     continue
                 if target > d.today() and anticipation == 0:
                     continue
+                # Reading dismisses this reminder; an overdue obligation resurfaces as urgent.
+                if row.read_at and not urgent:
+                    continue
                 case = cases[source["case_id"]]
                 client = d.get(db, m.Client, case.client_id, user)
                 label = (
-                    "vencido"
+                    "urgente · vencido"
+                    if urgent
+                    else "fecha programada pasada"
                     if target < d.today()
                     else "vence hoy"
                     if target == d.today()
@@ -907,6 +920,8 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
                         if source["provisional"]
                         else label,
                         "provisional": source["provisional"],
+                        "urgent": urgent,
+                        "can_attend": source["kind"] == "procesal" and source["case_id"] in editable,
                     }
                 )
     for key, row in old.items():
@@ -914,7 +929,7 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
             row.status = "cancelado"
     d.save(db)
     return sorted(
-        result, key=lambda x: (x["target_date"], x["case_id"], x["anticipation"])
+        result, key=lambda x: (not x["urgent"], x["target_date"], x["case_id"], -x["anticipation"])
     )
 
 
@@ -926,7 +941,32 @@ def read_alert(key: int, db: Db, user: Actor) -> dict[str, bool]:
     d.case_access(db, user, row.case_id)
     if row.kind == "pago":
         admin(user)
+    if row.target_date < d.today() and not row.source_key.endswith(":True"):
+        raise HTTPException(409, "El aviso es urgente; atiende la obligación para retirarlo")
     row.read_at = m.now()
+    d.save(db)
+    return {"ok": True}
+
+
+@app.post("/alerts/{key}/attend")
+def attend_alert(key: int, db: Db, user: Actor) -> dict[str, bool]:
+    row = d.get(db, m.Notice, key, user)
+    if row.user_id != user.id or row.kind != "procesal":
+        raise HTTPException(404, "Aviso procesal no encontrado")
+    d.case_access(db, user, row.case_id, edit=True)
+    task_id = int(row.source_key.split(":")[1])
+    task = d.get(db, m.Task, task_id, user, lock=True)
+    if task.case_id != row.case_id:
+        raise HTTPException(404, "Tarea no encontrada")
+    if task.status in ("atendido", "atendida"):
+        return {"ok": True}
+    if task.status != "pendiente" or task.due_date != row.target_date or row.status != "pendiente":
+        raise HTTPException(409, "El aviso cambió; actualiza las alertas")
+    before = d.public(task)
+    task.status = "atendido"
+    d.audit(db, user, task, "atender tarea", before)
+    # Applies to every recipient in this tenant, including future reminders.
+    d.cancel_notices(db, user, f"task:{task.id}")
     d.save(db)
     return {"ok": True}
 
