@@ -14,7 +14,7 @@ def export() -> Path:
     lines = [
         "-- Lexio: esquema inicial MySQL 8.0.16+ / InnoDB.",
         "-- Selecciona en HeidiSQL la base de datos de Railway antes de ejecutar.",
-        "-- Esquema completo: crea las 15 tablas de Lexio desde cero, incluida clientes (lexio_clients).",
+        f"-- Esquema completo: crea las {len(Base.metadata.tables)} tablas de Lexio desde cero, incluida clientes (lexio_clients).",
         "-- Ejecutar una sola vez en la base vacía seleccionada. No requiere tablas anteriores.",
         "-- DDL MySQL hace COMMIT implícito: no es reversible mediante ROLLBACK.",
         "SET NAMES utf8mb4;",

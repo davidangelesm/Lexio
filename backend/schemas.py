@@ -6,13 +6,17 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    HttpUrl,
     StringConstraints,
     field_validator,
     model_validator,
 )
 
 Password = Annotated[str, StringConstraints(strip_whitespace=False)]
+LegalArea = Literal[
+    "Civil", "Penal", "Laboral", "Tributario", "Derecho corporativo",
+    "Constitucional", "Familia", "Familia – Civil", "Administrativo",
+    "Conciliación extrajudicial", "Fiscalía",
+]
 Username = Annotated[
     str,
     StringConstraints(
@@ -74,7 +78,7 @@ class ClientIn(Input):
 
 class CaseIn(Input):
     client_id: int = Field(gt=0)
-    area: str = Field(min_length=1, max_length=80)
+    area: LegalArea
     subject: str = Field(min_length=1, max_length=150)
     description: str = Field(min_length=1, max_length=10000)
     initial_stage: str = Field(min_length=1, max_length=100)
@@ -86,7 +90,7 @@ class CaseIn(Input):
 
 
 class CaseUpdate(Input):
-    area: str = Field(min_length=1, max_length=80)
+    area: LegalArea
     subject: str = Field(min_length=1, max_length=150)
     description: str = Field(min_length=1, max_length=10000)
     current_stage: str = Field(min_length=1, max_length=100)
@@ -117,19 +121,6 @@ class TaskIn(Input):
     @classmethod
     def normalize_status(cls, value: str) -> str:
         return "atendido" if value == "atendida" else value
-
-
-class FileIn(Input):
-    title: str = Field(min_length=1, max_length=180)
-    url: HttpUrl
-    classification: Literal["operativo", "financiero"]
-
-    @field_validator("url")
-    @classmethod
-    def secure_url(cls, value: HttpUrl) -> HttpUrl:
-        if value.scheme != "https":
-            raise ValueError("El enlace del archivo debe usar HTTPS")
-        return value
 
 
 class EventIn(Input):

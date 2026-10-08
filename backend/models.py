@@ -137,22 +137,6 @@ class Task(Entity, Base):
     status: Mapped[str] = mapped_column(String(20), default="pendiente")
 
 
-class FileLink(Entity, Base):
-    __tablename__ = "lexio_files"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "id"),
-        ref("client_id", "clients"),
-        ref("case_id", "cases"),
-        ref("registered_by", "users"),
-    )
-    client_id: Mapped[int] = mapped_column(Integer)
-    case_id: Mapped[int | None] = mapped_column(Integer)
-    title: Mapped[str] = mapped_column(String(180))
-    url: Mapped[str] = mapped_column(Text)
-    classification: Mapped[str] = mapped_column(String(20))
-    registered_by: Mapped[int] = mapped_column(Integer)
-
-
 class Service(Entity, Base):
     __tablename__ = "lexio_services"
     __table_args__ = (

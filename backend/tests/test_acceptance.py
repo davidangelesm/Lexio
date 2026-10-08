@@ -256,26 +256,13 @@ def test_alerts_weekdays_idempotent_and_read_not_resolution(setup):
         assert all(x.status == "cancelado" for x in db.scalars(select(m.Notice)))
 
 
-def test_financial_files_and_service_fields_hidden(setup):
+def test_service_financial_fields_hidden(setup):
     client, headers, ids, _ = setup
     _, case = make_case(setup)
     service(setup, case)
     root = f"/cases/{case['id']}"
     client.post(
         root + "/access", headers=headers[0], json={"user_id": ids[1], "level": "edit"}
-    )
-    file = client.post(
-        root + "/files",
-        headers=headers[0],
-        json={
-            "title": "Contrato económico",
-            "url": "https://drive.google.com/file/d/example",
-            "classification": "financiero",
-        },
-    ).json()
-    assert client.get(root + "/files", headers=headers[1]).json() == []
-    assert (
-        client.get(f"/files/{file['id']}/open", headers=headers[1]).status_code == 403
     )
     view = client.get(root + "/services", headers=headers[1]).json()[0]
     assert not {"fee", "installments", "payments"} & set(view)

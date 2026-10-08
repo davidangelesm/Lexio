@@ -182,7 +182,7 @@ def cases(
     db: Db,
     user: Actor,
     client_id: int | None = None,
-    area: str | None = None,
+    area: s.LegalArea | None = None,
     status: str | None = None,
     responsible_id: int | None = None,
     start: date | None = None,
@@ -422,88 +422,6 @@ def update_task(
     d.cancel_notices(db, user, f"task:{row.id}")
     d.save(db)
     return d.public(row)
-
-
-@app.get("/cases/{key}/files")
-def files(key: int, db: Db, user: Actor) -> list[dict[str, Any]]:
-    d.case_access(db, user, key)
-    query = select(m.FileLink).where(
-        m.FileLink.tenant_id == user.tenant_id, m.FileLink.case_id == key
-    )
-    if user.role != "admin":
-        query = query.where(m.FileLink.classification == "operativo")
-    return [d.public(x, {"url"}) for x in db.scalars(query)]
-
-
-@app.post("/cases/{key}/files", status_code=201)
-def create_file(key: int, data: s.FileIn, db: Db, user: Actor) -> dict[str, Any]:
-    case = d.case_access(db, user, key, edit=True)
-    if data.classification == "financiero":
-        admin(user)
-    row = m.FileLink(
-        tenant_id=user.tenant_id,
-        client_id=case.client_id,
-        case_id=key,
-        registered_by=user.id,
-        title=data.title,
-        url=str(data.url),
-        classification=data.classification,
-    )
-    db.add(row)
-    d.audit(db, user, row, "registrar archivo")
-    d.save(db)
-    return d.public(row, {"url"})
-
-
-@app.get("/files/{key}/open")
-def open_file(key: int, db: Db, user: Actor) -> dict[str, str]:
-    row = d.get(db, m.FileLink, key, user)
-    if row.case_id is None:
-        client_access(db, user, row.client_id)
-    else:
-        d.case_access(db, user, row.case_id)
-    if row.classification == "financiero":
-        admin(user)
-    return {"url": row.url}
-
-
-def client_access(db: Db, user: m.User, key: int) -> m.Client:
-    row = db.scalar(visible_clients(db, user).where(m.Client.id == key))
-    if row is None:
-        raise HTTPException(404, "Cliente no encontrado o sin autorización")
-    return row
-
-
-@app.get("/clients/{key}/files")
-def client_files(key: int, db: Db, user: Actor) -> list[dict[str, Any]]:
-    client_access(db, user, key)
-    query = select(m.FileLink).where(
-        m.FileLink.tenant_id == user.tenant_id,
-        m.FileLink.client_id == key,
-        m.FileLink.case_id.is_(None),
-    )
-    if user.role != "admin":
-        query = query.where(m.FileLink.classification == "operativo")
-    return [d.public(x, {"url"}) for x in db.scalars(query)]
-
-
-@app.post("/clients/{key}/files", status_code=201)
-def create_client_file(key: int, data: s.FileIn, db: Db, user: Actor) -> dict[str, Any]:
-    admin(user)
-    client_access(db, user, key)
-    row = m.FileLink(
-        tenant_id=user.tenant_id,
-        client_id=key,
-        case_id=None,
-        registered_by=user.id,
-        title=data.title,
-        url=str(data.url),
-        classification=data.classification,
-    )
-    db.add(row)
-    d.audit(db, user, row, "registrar archivo general del cliente")
-    d.save(db)
-    return d.public(row, {"url"})
 
 
 @app.get("/cases/{key}/events")
@@ -1055,7 +973,7 @@ def dashboard(db: Db, user: Actor) -> dict[str, Any]:
 def operational(
     db: Db,
     user: Actor,
-    area: str | None = None,
+    area: s.LegalArea | None = None,
     responsible_id: int | None = None,
     status: str | None = None,
     client_id: int | None = None,
@@ -1130,7 +1048,7 @@ def economic_report(
     client_id: int | None = None,
     case_id: int | None = None,
     service_id: int | None = None,
-    area: str | None = None,
+    area: s.LegalArea | None = None,
 ) -> dict[str, Any]:
     admin(user)
     cut = cutoff or d.today()
@@ -1180,7 +1098,7 @@ def collections(
     client_id: int | None = None,
     case_id: int | None = None,
     service_id: int | None = None,
-    area: str | None = None,
+    area: s.LegalArea | None = None,
 ) -> dict[str, Any]:
     admin(user)
     if start > end:

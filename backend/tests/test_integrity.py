@@ -129,44 +129,6 @@ def test_pending_event_and_concluded_case_debt_in_reports(setup):
     assert report["areas"][0]["concluido"] == 1
 
 
-def test_file_urls_and_client_general_documents(setup):
-    client, headers, ids, _ = setup
-    customer, case = make_case(setup)
-    root = f"/clients/{customer['id']}/files"
-    assert (
-        client.post(
-            root,
-            headers=headers[0],
-            json={
-                "title": "HTTP",
-                "url": "http://example.test",
-                "classification": "operativo",
-            },
-        ).status_code
-        == 422
-    )
-    file = client.post(
-        root,
-        headers=headers[0],
-        json={
-            "title": "Documento general",
-            "url": "https://drive.google.com/file/d/example",
-            "classification": "operativo",
-        },
-    ).json()
-    assert (
-        client.get(f"/files/{file['id']}/open", headers=headers[1]).status_code == 404
-    )
-    client.post(
-        f"/cases/{case['id']}/access",
-        headers=headers[0],
-        json={"user_id": ids[1], "level": "read"},
-    )
-    assert (
-        client.get(f"/files/{file['id']}/open", headers=headers[1]).status_code == 200
-    )
-
-
 def test_assignment_requires_case_access_and_token_is_required(setup):
     client, headers, ids, _ = setup
     _, case = make_case(setup)
