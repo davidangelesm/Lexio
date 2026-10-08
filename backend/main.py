@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from routing import ExactMoneyRoute
 from security import Actor, Db, admin, passwords, token
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 app = FastAPI(title="Lexio", version="0.2.0")
@@ -312,6 +312,26 @@ def create_entry(key: int, data: s.EntryIn, db: Db, user: Actor) -> dict[str, An
     row = m.Entry(tenant_id=user.tenant_id, case_id=key, registered_by=user.id, **data.model_dump())
     db.add(row)
     d.audit(db, user, row, "Registrar actuación")
+    d.save(db)
+    return d.entry_view(db, user, row)
+
+
+@app.put("/entries/{key}")
+def update_entry(key: int, data: s.EntryIn, db: Db, user: Actor) -> dict[str, Any]:
+    row = d.get(db, m.Entry, key, user, lock=True)
+    d.case_access(db, user, row.case_id, edit=True)
+    before = d.public(row)
+    if row.alert_date != data.alert_date:
+        d.cancel_notices(db, user, f"legal:{row.id}")
+        if data.alert_date is not None and not row.attended:
+            # Restaurar un plazo anterior reutiliza sus avisos sin crear otros en fin de semana.
+            db.execute(update(m.Notice).where(
+                m.Notice.tenant_id == user.tenant_id,
+                m.Notice.source_key.startswith(f"legal:{row.id}:{data.alert_date.isoformat()}:", autoescape=True),
+            ).values(status="pendiente", read_at=None))
+    for name, value in data.model_dump().items():
+        setattr(row, name, value)
+    d.audit(db, user, row, "Editar actuación", before)
     d.save(db)
     return d.entry_view(db, user, row)
 
