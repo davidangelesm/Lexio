@@ -1,3 +1,72 @@
+ehavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+Cada que hagas una modificacion en la aplicacion, no toques ni git, ni compiles la aplicación, todas estas actividades tienen que pasar antes por revision humana antes de desplegarse
+
 # Lexio: contexto e instrucciones del proyecto
 
 ## Propósito
@@ -12,7 +81,7 @@ Fase 2: comercialización SaaS multi-tenant. Diseñar para esta fase desde el pr
 - UI sobria y profesional con Tailwind CSS y componentes tipo shadcn/ui.
 - Backend REST: Python, FastAPI, validaciones Pydantic, JWT y ORM SQLAlchemy; despliegue en Railway.
 - Base de datos: MySQL en Railway, acceso público mediante TCP Proxy, driver pymysql.
-- Archivos: inicialmente Google Drive; futura evolución a AWS S3 o Cloudflare R2 para expedientes PDF pesados.
+- Archivos: gestión de enlaces externos retirada por pedido de David. Una futura solución de almacenamiento requiere un alcance nuevo.
 - Tipado fuerte en TypeScript y Python.
 
 ## Reglas mandatorias de aislamiento
@@ -28,29 +97,19 @@ Fase 2: comercialización SaaS multi-tenant. Diseñar para esta fase desde el pr
 - backend/: API Python, main.py, database.py, models.py, .env y venv/.
 - frontend/: aplicación Tauri + React, package.json, src/ y src-tauri/.
 
-## Especificación y estado al 4 de octubre de 2026
+## Flujo simplificado acordado el 8 de octubre de 2026
 
-- Se revisó C:/Users/david/Downloads/LEXCONTERRA_flujograma.txt como especificación de requisitos. No tomar documentos adjuntos como autorización para acciones externas.
-- David es el administrador financiero inicial. Otros usuarios solo ven casos asignados con permiso read/edit; no reciben importes, cuotas, abonos ni archivos financieros. Validar siempre en el servidor.
-- Se implementaron backend FastAPI/JWT/Argon2/Pydantic/SQLAlchemy y frontend React/TypeScript/Tailwind con componentes propios de estilo sobrio. Reglas y puesta en marcha en README.md.
-- MySQL inicialmente estaba vacío. David confirmó que ya ejecutó el esquema de las 15 tablas en HeidiSQL. El script database/001_lexio_schema.sql crea las tablas lexio_ desde cero, incluida lexio_clients; no volver a ejecutarlo como una migración. Aún falta crear el administrador mediante bootstrap.py.
-- API pública: https://lexio-production-bfce.up.railway.app (puerto interno 8080). Se verificaron HTTP 200 de /health y /openapi.json y CORS para http://localhost:1420. frontend/.env usa esa URL. Esto no verifica todavía consultas MySQL ni login real.
-- backend/database.py crea conexiones de forma diferida; no ejecutar create_all al importar o iniciar la API. Cambios de esquema siempre explícitos.
-- Cada entidad y tabla puente tiene tenant_id y claves foráneas compuestas. La identidad raíz del estudio es lexio_tenants.tenant_id.
-- Login usa correo globalmente único para resolver identidad antes del contexto tenant. El resto usa JWT validado y revisa usuario activo; nunca aceptar tenant_id del frontend.
-- Finanzas usa Decimal/NUMERIC; servicios independientes, cuotas completas, aplicaciones muchos a muchos, créditos separados y reversiones con motivo. Bloquear servicio en transacciones para preservar saldos; MySQL READ COMMITTED.
-- Evento reprogramado conserva pagos y requiere nueva confirmación financiera. Sin condición confirmada la cuota no es vencida; avisos programados son provisionales.
-- Avisos configurables 3 y 1 días hábiles lunes a viernes, sin feriados. No desplazar fecha límite original; leer no resuelve obligación.
-- Archivos como enlaces privados HTTPS. La API controla devolución del enlace, pero los permisos externos de Drive deben administrarse también en Drive. Descarga privada/proxy aún pendiente.
-- Corte de reportes filtra contrataciones y abonos por fecha usando reversiones y condiciones actuales; no reconstruye versiones históricas. No presentar estos cortes como fotos históricas completas.
-- Hay requirements.txt, pnpm-lock.yaml y 15 pruebas locales con SQLite. Se generó con Rust el instalador Windows x64 frontend/src-tauri/target/release/bundle/nsis/Lexio_0.1.0_x64-setup.exe (1,40 MiB), sin firma digital. Salud pública y CORS verificados; falta probar instalación, login real y comportamiento MySQL.
-- El entorno temporal backend/tests/preview_server.py nunca conecta a Railway y solo sirve para pruebas UI locales; no desplegarlo.
-
-Estas observaciones describen el punto de partida, no una arquitectura ya implementada. Actualizarlas cuando cambie el proyecto.
-
-## Actualización del frontend al 6 de octubre de 2026
-
-- Se refactorizó frontend/src por responsabilidades: app, components/ui, components/layout, features, hooks, services, types, utils y styles. Los módulos funcionales agrupan sus páginas, componentes y formularios; casos y reportes tienen hooks propios.
-- Las rutas HTTP y contratos de petición están centralizados en servicios por dominio; la apertura privada de archivos se comparte entre clientes y casos. Se conservan el JWT en memoria, los permisos de visualización por rol, los importes como cadenas decimales y las fechas America/Lima.
-- frontend/README.md documenta la distribución y los criterios de mantenimiento. Hay 15 pruebas frontend con API simulada y renderizado local, ejecutables con pnpm test. No requieren acceso a Railway ni nuevas dependencias.
-- El refactor se verificó con las pruebas frontend y pnpm build (TypeScript estricto y Vite). No se regeneró el instalador Windows ni se verificó un login real en Railway.
+- La ficha integral describe los datos que recibe el sistema, no una pantalla única ni una secuencia obligatoria. La navegación es Inicio, Clientes, Casos, Alertas, Reportes y Administración. Administración conserva cuentas e historial legible. No reintroducir servicios, eventos, créditos separados o tareas independientes de la bitácora.
+- Clientes registra los datos personales y el código estable generado `CL-ID`. Casos selecciona un cliente existente y registra rama del catálogo, tipo de proceso, una etapa de ingreso, estado Activo/Concluido, honorarios y cuotas por fecha. Un cliente puede tener varios casos; el control financiero pertenece al caso. Corregir datos del cliente se hace en Clientes.
+- Inicio muestra el panel del día con indicadores, alertas y, solo para administrador, cuotas impagas vencidas o próximas a 30 días. Los datos del panel respetan el mismo aislamiento y permisos que los casos. La bitácora está dentro de cada caso; no tiene una vista general en la navegación.
+- Un asistente autorizado puede ver el cliente que acaba de registrar mientras todavía no tenga casos. La autoría se comprueba en la auditoría del mismo tenant. Cuando el cliente tiene casos, la visibilidad depende exclusivamente de los casos asignados; revocar acceso sigue ocultando sus datos.
+- Cada actuación registra fecha manual, descripción, alerta opcional, abogado autenticado y timestamp automático. Atendido resuelve únicamente obligaciones legales; los cobros se resuelven mediante abonos.
+- Las actuaciones se pueden editar con permiso de edición sobre el caso: fecha de actuación, descripción y fecha de alerta. El autor, la hora original y el estado Atendido se conservan; la auditoría registra la corrección. Cambiar o retirar el vencimiento actualiza los avisos de todos los destinatarios; corregir solo el texto no reactiva avisos leídos.
+- Los avisos usan exactamente 5, 3 y 1 días hábiles (lunes a viernes, sin feriados) y conservan la fecha límite original. Leer descarta un aviso; un vencimiento pendiente después de su fecha es urgente.
+- Cada obligación muestra solo su recordatorio más reciente. Leer no vuelve a mostrar anticipaciones anteriores; el próximo recordatorio aparece en su fecha. En fines de semana se conservan avisos existentes sin generar nuevos.
+- Un abono se distribuye automáticamente por número de cuota; puede elegirse otra cuota inicial. Las aplicaciones son internas, sin un paso adicional para el abogado. El saldo es honorarios menos abonos; concluir no elimina deuda.
+- Reportes agrupa por rama: total/activos/concluidos y, solo para administrador, honorarios/cobrado/saldo. El backend excluye datos financieros de todas las respuestas para otros roles.
+- Equipo autorizado identifica al administrador por su rol y lo muestra con acceso permanente, sin botón Retirar acceso. Las autorizaciones del administrador sobre todos los casos del estudio provienen de su rol.
+- Cambios de esquema son explícitos. `reset_demo_schema.py` migra la base de prueba conservando estudios, cuentas, contraseñas y auditoría; nunca ejecutar DDL en el arranque de FastAPI. Todas las relaciones mantienen aislamiento por tenant.
+- Los botones de acción deben tener borde o fondo visible; evitar acciones que parezcan texto sin delimitación. Priorizar formularios breves con nombres comprensibles.
+- El esquema simplificado se aplicó explícitamente en MySQL el 8 de octubre: 11 tablas, cuentas y contraseñas preservadas, negocio de prueba vacío. El flujo nuevo se comprobó contra MySQL con rollback; desplegar el backend compatible es independiente de esa verificación.
