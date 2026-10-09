@@ -1,14 +1,17 @@
 import type { ComponentProps } from "react";
-import { isLegalArea, LEGAL_AREAS } from "../models/legalAreas";
+import type { LegalArea } from "../../../types";
+
+type Props = ComponentProps<"select"> & { areas: LegalArea[] };
 
 export default function AreaSelect({
   defaultValue,
   required,
+  areas,
   ...props
-}: ComponentProps<"select">) {
+}: Props) {
   const selected =
-    typeof defaultValue === "string" && isLegalArea(defaultValue)
-      ? defaultValue
+    typeof defaultValue === "string" || typeof defaultValue === "number"
+      ? (areas.find((area) => area.id === Number(defaultValue))?.id ?? "")
       : "";
   return (
     <select
@@ -17,11 +20,15 @@ export default function AreaSelect({
       defaultValue={props.value === undefined ? selected : undefined}
     >
       <option value="">
-        {required ? "Selecciona una rama" : "Todas las ramas"}
+        {required
+          ? areas.length
+            ? "Selecciona una rama"
+            : "Sin ramas: el administrador debe configurar el catálogo."
+          : "Todas las ramas"}
       </option>
-      {LEGAL_AREAS.map((area) => (
-        <option key={area} value={area}>
-          {area}
+      {areas.map((area) => (
+        <option key={area.id} value={area.id}>
+          {area.name}
         </option>
       ))}
     </select>

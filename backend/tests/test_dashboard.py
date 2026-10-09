@@ -4,7 +4,7 @@ import models as m
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from test_integral_flow import abono, create, ficha
+from test_integral_flow import abono, area_id, create, ficha
 
 
 def test_dashboard_counts_finances_and_upcoming_partial_overdue_payments(setup):
@@ -84,7 +84,7 @@ def test_dashboard_isolates_tenants_and_excludes_staff_financial_data(setup):
     visible = client.get("/dashboard", headers=headers[1]).json()
     assert visible == {"counts": {"total_cases": 1, "active_cases": 1, "concluded_cases": 0, "pending_legal_alerts": 1}}
     # Tener otro estudio con sus datos no altera los indicadores del estudio actual.
-    result = client.post("/cases", headers=headers[2], json=ficha(document="87654321", fee="500.00", installments=[{"amount": "500.00", "due_date": "2026-10-15"}]))
+    result = client.post("/cases", headers=headers[2], json=ficha(document="87654321", area_id=area_id(client, headers[2]), fee="500.00", installments=[{"amount": "500.00", "due_date": "2026-10-15"}]))
     assert result.status_code == 201
     own = client.get("/dashboard", headers=headers[0]).json()
     foreign = client.get("/dashboard", headers=headers[2]).json()

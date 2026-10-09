@@ -10,6 +10,7 @@ import { casesService } from "../src/services/cases.ts";
 import { financeService } from "../src/services/finance.ts";
 import { reportsService } from "../src/services/reports.ts";
 import { dashboardService } from "../src/services/dashboard.ts";
+import { legalAreasService } from "../src/services/legalAreas.ts";
 import App from "../src/app/App.tsx";
 import AppShell from "../src/components/layout/AppShell.tsx";
 import CaseWorkspace from "../src/features/cases/CaseWorkspace.tsx";
@@ -29,10 +30,6 @@ import UserForm from "../src/features/admin/forms/UserForm.tsx";
 import { dateTimeLabels, dateLabel } from "../src/utils/format.ts";
 import { automaticAllocations } from "../src/features/cases/models/paymentAllocation.ts";
 import { useLexio } from "../src/hooks/useLexio.ts";
-import {
-  LEGAL_AREAS,
-  legalArea,
-} from "../src/features/cases/models/legalAreas.ts";
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -66,11 +63,16 @@ const client = {
   email: "",
   address: "Lima",
 };
+const areas = [
+  { id: 1, name: "Civil" },
+  { id: 2, name: "Penal" },
+];
 const item = {
   id: 1,
   code: "CAS-000001",
   client_id: 1,
   client,
+  area_id: 1,
   area: "Civil",
   process_type: "Cobro de deuda",
   initial_stage: "Demanda",
@@ -312,16 +314,25 @@ test("navegación separa Inicio, Clientes y Casos sin bitácora independiente", 
 });
 test("filtros envían nombres del contrato y omiten valores vacíos", async () => {
   const calls = capture([]);
-  await casesService.list({ search: "Ana & José", area: "", status: "activo" });
+  await casesService.list({
+    search: "Ana & José",
+    area_id: "",
+    status: "activo",
+  });
   await casesService.list();
   const url = new URL(calls[0].url);
   assert.equal(url.searchParams.get("search"), "Ana & José");
-  assert.equal(url.searchParams.has("area"), false);
+  assert.equal(url.searchParams.has("area_id"), false);
   assert.equal(calls[1].url, "https://lexio.test/cases");
   await casesService.list({ client_id: String(client.id) });
   assert.deepEqual(
     [...new URL(calls[2].url).searchParams],
     [["client_id", "1"]],
+  );
+  await casesService.list({ area_id: "42" });
+  assert.deepEqual(
+    [...new URL(calls[3].url).searchParams],
+    [["area_id", "42"]],
   );
 });
 test("clientes ofrecen acciones separadas vinculadas al mismo cliente", () => {
@@ -424,6 +435,7 @@ test("lista de casos ofrece botones claros y un solo estado de proceso", () => {
     actor: admin,
     isAdmin: true,
     cases: [item],
+    areas,
     clients: [client],
     busy: false,
     search: "",
@@ -455,6 +467,7 @@ test("dos casos del mismo cliente conservan botones de acceso independientes", (
     actor: admin,
     isAdmin: true,
     cases: [item, { ...item, id: 2, process_type: "Desalojo" }],
+    areas,
     clients: [client],
     busy: false,
     search: "",
@@ -481,6 +494,7 @@ test("dos casos del mismo cliente conservan botones de acceso independientes", (
 test("crear caso selecciona un cliente existente y reúne proceso y honorarios", () => {
   const html = render(CaseForm, {
     actor: admin,
+    areas,
     users: [admin, staff],
     clients: [client],
     saved: noop,
@@ -506,6 +520,7 @@ test("nuevo caso desde un cliente conserva la selección y orienta si falta regi
     actor: admin,
     users: [admin],
     clients: [client, second],
+    areas,
     clientId: 2,
     saved: noop,
   };
@@ -521,6 +536,7 @@ test("nuevo caso desde un cliente conserva la selección y orienta si falta regi
 test("editar proceso como staff conserva datos de cliente y oculta finanzas", () => {
   const html = render(CaseForm, {
     actor: staff,
+    areas,
     users: [staff],
     clients: [client],
     item,
@@ -538,6 +554,7 @@ test("honorarios y montos se conservan al editar caso con abonos", () => {
     actor: admin,
     users: [admin, staff],
     clients: [client],
+    areas,
     item,
     saved: noop,
   });
@@ -555,7 +572,7 @@ test("editar un caso conserva el cliente y las cuotas sin reenviar datos persona
   const calls = capture(item);
   const form = new FormData();
   for (const [name, value] of Object.entries({
-    area: item.area,
+    area_id: String(item.area_id),
     process_type: item.process_type,
     initial_stage: item.initial_stage,
     status: "concluido",
@@ -570,6 +587,7 @@ test("editar un caso conserva el cliente y las cuotas sin reenviar datos persona
   form.set("name", "No debe modificar al cliente");
   await formProps(CaseForm, {
     actor: admin,
+    areas,
     users: [admin, staff],
     clients: [client],
     item,
@@ -579,6 +597,8 @@ test("editar un caso conserva el cliente y las cuotas sin reenviar datos persona
   assert.equal(calls[0].method, "PUT");
   const data = JSON.parse(calls[0].body);
   assert.equal(data.status, "concluido");
+  assert.equal(data.area_id, item.area_id);
+  assert.equal("area" in data, false);
   assert.deepEqual(data.installments, [
     { id: 1, amount: "500.00", due_date: "2026-10-16" },
     { id: 2, amount: "500.00", due_date: "2026-10-20" },
@@ -589,6 +609,7 @@ test("editar un caso conserva el cliente y las cuotas sin reenviar datos persona
 test("detalle destaca primero el cliente y oculta importes al equipo", () => {
   const props = {
     selected: item,
+    areas,
     actor: admin,
     users: [admin, staff],
     clients: [client],
@@ -622,22 +643,45 @@ test("detalle destaca primero el cliente y oculta importes al equipo", () => {
     /Contratar servicio|Aplicar crédito|Vincular evento|Archivos/,
   );
 });
-test("selector conserva exactamente las once ramas", () => {
-  const html = render(AreaSelect, {
-    name: "area",
+test("selector lee el catálogo de la API y mantiene el ID al cambiar nombres", async () => {
+  const catalog = [
+    { id: 19, name: "Derecho ambiental" },
+    { id: 42, name: "Derecho digital" },
+  ];
+  const calls = capture(catalog);
+  const loaded = await legalAreasService.list();
+  assert.equal(calls[0].url, "https://lexio.test/legal-areas");
+  assert.equal(calls[0].method, "GET");
+  const props = {
+    name: "area_id",
     required: true,
-    defaultValue: "Antigua",
+    defaultValue: 42,
+    areas: loaded,
+  };
+  const html = render(AreaSelect, props);
+  assert.equal((html.match(/<option /g) || []).length, 3);
+  assert.match(
+    html,
+    /<option value="42" selected="">Derecho digital<\/option>/,
+  );
+  assert.match(html, /<option value="19">Derecho ambiental<\/option>/);
+  assert.doesNotMatch(html, />Civil<|>Penal</);
+  const renamed = render(AreaSelect, {
+    ...props,
+    areas: [catalog[0], { ...catalog[1], name: "Derecho tecnológico" }],
   });
-  assert.equal((html.match(/<option /g) || []).length, 12);
-  for (const area of LEGAL_AREAS) assert.ok(html.includes(`value="${area}"`));
-  assert.equal(legalArea("Fiscalía"), "Fiscalía");
-  assert.throws(() => legalArea("Otra"), /Selecciona una rama/);
+  assert.match(
+    renamed,
+    /<option value="42" selected="">Derecho tecnológico<\/option>/,
+  );
+  assert.doesNotMatch(renamed, /Derecho digital/);
+  assert.match(render(AreaSelect, { ...props, areas: [] }), /Sin ramas/);
 });
 test("un cliente puede tener varios casos con honorarios propios", async () => {
   const calls = capture(item);
   const data = {
     client_id: client.id,
-    area: "Civil",
+    area_id: 1,
     process_type: "Cobro",
     initial_stage: "Demanda",
     status: "activo",
@@ -648,7 +692,7 @@ test("un cliente puede tener varios casos con honorarios propios", async () => {
   const form = new FormData();
   for (const [name, value] of Object.entries({
     client_id: String(client.id),
-    area: data.area,
+    area_id: String(data.area_id),
     process_type: data.process_type,
     initial_stage: data.initial_stage,
     status: data.status,
@@ -663,6 +707,7 @@ test("un cliente puede tener varios casos con honorarios propios", async () => {
     actor: admin,
     users: [admin],
     clients: [client],
+    areas,
     saved: noop,
   };
   await formProps(CaseForm, props).submit(form);
@@ -680,6 +725,40 @@ test("un cliente puede tener varios casos con honorarios propios", async () => {
   assert.equal(second.process_type, "Desalojo");
   assert.equal(second.fee, "2000.00");
   assert.equal("client" in second, false);
+});
+test("nuevas ramas se envían por ID y un catálogo vacío o ajeno impide guardar", async () => {
+  const calls = capture(item);
+  const form = new FormData();
+  for (const [name, value] of Object.entries({
+    client_id: "1",
+    area_id: "42",
+    process_type: "Protección de datos",
+    initial_stage: "Consulta",
+    status: "activo",
+  }))
+    form.set(name, value);
+  const props = {
+    actor: staff,
+    users: [staff],
+    clients: [client],
+    areas: [{ id: 42, name: "Derecho digital" }],
+    saved: noop,
+  };
+  await formProps(CaseForm, props).submit(form);
+  const submitted = JSON.parse(calls[0].body);
+  assert.equal(submitted.area_id, 42);
+  assert.equal("area" in submitted, false);
+  assert.equal("tenant_id" in submitted, false);
+  form.set("area_id", "99");
+  await assert.rejects(
+    formProps(CaseForm, props).submit(form),
+    /Selecciona una rama del catálogo/,
+  );
+  await assert.rejects(
+    formProps(CaseForm, { ...props, areas: [] }).submit(form),
+    /configurar el catálogo/,
+  );
+  assert.equal(calls.length, 1);
 });
 test("bitácora envía asunto, tipo y descripción detallada con responsable autenticado", async () => {
   const calls = capture({});

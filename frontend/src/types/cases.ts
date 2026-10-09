@@ -1,5 +1,9 @@
 import type { Client } from "./clients";
 export type CaseTab = "bitacora" | "finanzas";
+export interface LegalArea {
+  id: number;
+  name: string;
+}
 export interface Installment {
   id: number;
   number: number;
@@ -22,6 +26,7 @@ export interface Case {
   code: string;
   client_id: number;
   client: Client;
+  area_id: number;
   area: string;
   process_type: string;
   initial_stage: string;

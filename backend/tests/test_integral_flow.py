@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 def ficha(document="12345678", **changes):
     return {
         "client": {"document_type": "DNI", "document_number": document, "name": "María Torres", "phone": "999555111", "email": "maria@test.pe", "address": "Lima"},
-        "area": "Civil", "process_type": "Cobro de deuda", "initial_stage": "Demanda",
+        "area_id": 1, "process_type": "Cobro de deuda", "initial_stage": "Demanda",
         "fee": "1000.00", "installments": [
             {"amount": "500.00", "due_date": "2026-10-15"},
             {"amount": "500.00", "due_date": "2026-10-20"},
@@ -22,6 +22,10 @@ def create(setup, **changes):
     result = client.post("/cases", headers=headers[0], json=ficha(**changes))
     assert result.status_code == 201, result.text
     return result.json()
+
+
+def area_id(client, header, name="Civil"):
+    return next(x["id"] for x in client.get("/legal-areas", headers=header).json() if x["name"] == name)
 
 
 def abono(client, header, case, amount, **changes):
@@ -187,8 +191,8 @@ def test_catalog_two_statuses_and_readable_audit(setup):
     client, headers, _, engine = setup
     assert client.post("/cases", headers=headers[0], json=ficha(area="Otra")).status_code == 422
     assert client.post("/cases", headers=headers[0], json=ficha(status="suspendido")).status_code == 422
-    case = create(setup, area="Familia – Civil")
-    assert client.get("/cases", headers=headers[0], params={"area": "Otra"}).status_code == 422
+    case = create(setup, area_id=area_id(client, headers[0], "Familia – Civil"))
+    assert client.get("/cases", headers=headers[0], params={"area_id": "Otra"}).status_code == 422
     assert len(client.get("/cases", headers=headers[0], params={"search": "María"}).json()) == 1
     assert client.get("/cases", headers=headers[0], params={"search": case["client"]["code"]}).json()[0]["id"] == case["id"]
     assert client.get("/clients", headers=headers[0], params={"search": case["client"]["code"]}).json()[0]["id"] == case["client"]["id"]

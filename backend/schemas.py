@@ -6,11 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 Password = Annotated[str, StringConstraints(strip_whitespace=False)]
 Money = Annotated[Decimal, Field(gt=0, max_digits=14, decimal_places=2)]
-LegalArea = Literal[
-    "Civil", "Penal", "Laboral", "Tributario", "Derecho corporativo",
-    "Constitucional", "Familia", "Familia – Civil", "Administrativo",
-    "Conciliación extrajudicial", "Fiscalía",
-]
 Username = Annotated[str, StringConstraints(
     strip_whitespace=True, to_lower=True, min_length=3, max_length=50,
     pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
@@ -69,7 +64,7 @@ class InstallmentIn(Input):
 class CaseIn(Input):
     client_id: int | None = Field(default=None, gt=0)
     client: ClientIn | None = None
-    area: LegalArea
+    area_id: int = Field(gt=0)
     process_type: str = Field(min_length=1, max_length=150)
     initial_stage: str = Field(min_length=1, max_length=100)
     status: Literal["activo", "concluido"] = "activo"
@@ -86,13 +81,19 @@ class CaseIn(Input):
 
 class CaseUpdate(Input):
     client: ClientIn | None = None
-    area: LegalArea | None = None
+    area_id: int | None = Field(default=None, gt=0)
     process_type: str | None = Field(default=None, min_length=1, max_length=150)
     initial_stage: str | None = Field(default=None, min_length=1, max_length=100)
     status: Literal["activo", "concluido"] | None = None
     responsible_id: int | None = Field(default=None, gt=0)
     fee: Money | None = None
     installments: list[InstallmentIn] | None = Field(default=None, min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def area_required_when_present(self):
+        if "area_id" in self.model_fields_set and self.area_id is None:
+            raise ValueError("Selecciona una rama del catálogo")
+        return self
 
 
 class Grant(Input):

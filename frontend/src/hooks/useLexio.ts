@@ -4,6 +4,7 @@ import { alertsService } from "../services/alerts";
 import { casesService } from "../services/cases";
 import { clientsService } from "../services/clients";
 import { dashboardService } from "../services/dashboard";
+import { legalAreasService } from "../services/legalAreas";
 import { reportsService } from "../services/reports";
 import { setToken } from "../services/http";
 import type {
@@ -13,6 +14,7 @@ import type {
   CaseTab,
   Client,
   Dashboard,
+  LegalArea,
   Report,
   User,
 } from "../types";
@@ -27,6 +29,7 @@ export function useLexio() {
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [cases, setCases] = useState<Case[]>([]);
+  const [areas, setAreas] = useState<LegalArea[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard>();
   const [audit, setAudit] = useState<Audit[]>([]);
@@ -67,6 +70,7 @@ export function useLexio() {
     setSelectedState(undefined);
     setSelectedTab("bitacora");
     setCases([]);
+    setAreas([]);
     setClients([]);
     setUsers([]);
     setAlerts([]);
@@ -90,7 +94,7 @@ export function useLexio() {
     return () => window.removeEventListener("lexio-session-expired", logout);
   }, []);
   async function load(
-    filters = { search, area, status, client_id: clientFilter },
+    filters = { search, area_id: area, status, client_id: clientFilter },
   ) {
     if (!actor || renderSession !== session.current) return;
     const currentSession = session.current;
@@ -100,25 +104,33 @@ export function useLexio() {
     setBusy(true);
     setError("");
     try {
-      const [team, clientList, caseList, summary, notices, metrics, history] =
-        await Promise.all([
-          administrationService.listUsers(),
-          clientsService.list(),
-          casesService.list(page === "casos" ? filters : {}),
-          page === "inicio"
-            ? dashboardService.get()
-            : Promise.resolve(undefined),
-          page === "inicio" ? alertsService.list() : Promise.resolve(undefined),
-          page === "reportes"
-            ? reportsService.list()
-            : Promise.resolve(undefined),
-          page === "usuarios" && isAdmin
-            ? administrationService.listAudit()
-            : Promise.resolve(undefined),
-        ]);
+      const [
+        team,
+        clientList,
+        areaList,
+        caseList,
+        summary,
+        notices,
+        metrics,
+        history,
+      ] = await Promise.all([
+        administrationService.listUsers(),
+        clientsService.list(),
+        legalAreasService.list(),
+        casesService.list(page === "casos" ? filters : {}),
+        page === "inicio" ? dashboardService.get() : Promise.resolve(undefined),
+        page === "inicio" ? alertsService.list() : Promise.resolve(undefined),
+        page === "reportes"
+          ? reportsService.list()
+          : Promise.resolve(undefined),
+        page === "usuarios" && isAdmin
+          ? administrationService.listAudit()
+          : Promise.resolve(undefined),
+      ]);
       if (!isCurrent()) return;
       setUsers(team);
       setClients(clientList);
+      setAreas(areaList);
       setCases(caseList);
       if (summary) setDashboard(summary);
       if (notices) setAlerts(notices);
@@ -150,8 +162,12 @@ export function useLexio() {
     setBusy(true);
     setError("");
     try {
-      const item = await casesService.get(id);
+      const [item, areaList] = await Promise.all([
+        casesService.get(id),
+        legalAreasService.list(),
+      ]);
       if (isCurrent()) {
+        setAreas(areaList);
         setSelectedTab(isAdmin ? tab : "bitacora");
         setSelectedState(item);
       }
@@ -171,7 +187,7 @@ export function useLexio() {
     setArea("");
     setStatus("");
     setClientFilter("");
-    void load({ search: "", area: "", status: "", client_id: "" });
+    void load({ search: "", area_id: "", status: "", client_id: "" });
   }
   function viewClientCases(client: Client) {
     setSearch("");
@@ -184,7 +200,7 @@ export function useLexio() {
     if (page === "casos")
       void load({
         search: "",
-        area: "",
+        area_id: "",
         status: "",
         client_id: String(client.id),
       });
@@ -216,6 +232,7 @@ export function useLexio() {
     users,
     clients,
     cases,
+    areas,
     alerts,
     dashboard,
     audit,

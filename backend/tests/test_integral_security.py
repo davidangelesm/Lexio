@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from test_integral_flow import abono, create, ficha
+from test_integral_flow import abono, area_id, create, ficha
 
 
 def test_tenant_isolation_every_resource_and_relations(setup):
@@ -23,7 +23,7 @@ def test_tenant_isolation_every_resource_and_relations(setup):
     assert client.put(f"/clients/{case['client']['id']}", headers=headers[2], json=ficha()["client"]).status_code == 404
     assert client.post(f"/cases/{case['id']}/access", headers=headers[0], json={"user_id": ids[2], "level": "edit"}).status_code == 404
     assert client.post("/cases", headers=headers[0], json=ficha(document="11111111", responsible_id=ids[2])).status_code == 404
-    foreign = client.post("/cases", headers=headers[2], json=ficha(document="22222222")).json()
+    foreign = client.post("/cases", headers=headers[2], json=ficha(document="22222222", area_id=area_id(client, headers[2]))).json()
     assert abono(client, headers[0], case, "10.00", installment_id=foreign["installments"][0]["id"]).status_code == 422
     assert client.post("/cases", headers=headers[0], json={**ficha(document="33333333"), "tenant_id": 2}).status_code == 422
     with Session(engine) as db:
@@ -135,7 +135,7 @@ def test_staff_standalone_client_then_case_preserves_visibility_and_revocation(s
     own_client = registered.json()
     assert [x["id"] for x in client.get("/clients", headers=headers[1]).json()] == [own_client["id"]]
     assert client.get("/clients", headers=colleague_header).json() == []
-    data = {"client_id": own_client["id"], "area": "Civil", "process_type": "Cobro de deuda", "initial_stage": "Demanda"}
+    data = {"client_id": own_client["id"], "area_id": area_id(client, headers[1]), "process_type": "Cobro de deuda", "initial_stage": "Demanda"}
     assert client.post("/cases", headers=colleague_header, json=data).status_code == 404
     for hidden in (other_client, foreign_client):
         assert client.post("/cases", headers=headers[1], json={**data, "client_id": hidden["id"]}).status_code == 404

@@ -42,6 +42,7 @@ export default function App() {
           actor={actor}
           users={users}
           clients={clients}
+          areas={state.areas}
           back={() => {
             state.setSelected(undefined);
             void state.load();
@@ -106,6 +107,7 @@ export default function App() {
               actor={actor}
               users={users}
               clients={clients}
+              areas={state.areas}
               clientId={state.newCaseClientId}
               saved={(item) => {
                 state.setModal("");

@@ -1,4 +1,3 @@
-import type { LegalArea } from "../features/cases/models/legalAreas";
 export interface LoginInput {
   username: string;
   password: string;
@@ -29,7 +28,7 @@ export interface InstallmentInput {
 }
 export interface CaseInput {
   client_id: number;
-  area: LegalArea;
+  area_id: number;
   process_type: string;
   initial_stage: string;
   status: "activo" | "concluido";

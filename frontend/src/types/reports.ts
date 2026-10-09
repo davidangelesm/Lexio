@@ -7,6 +7,7 @@ export interface ReportTotals {
   balance?: string;
 }
 export interface ReportRow extends ReportTotals {
+  area_id: number;
   area: string;
 }
 export interface Report {

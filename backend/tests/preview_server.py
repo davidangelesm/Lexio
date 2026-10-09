@@ -14,7 +14,7 @@ os.environ["JWT_SECRET"] = "local-ui-test-only-not-production-1234567890"
 os.environ["CORS_ORIGINS"] = "http://127.0.0.1:1420,http://localhost:1420,http://127.0.0.1:1422"
 import uvicorn
 from main import app
-from models import Tenant, User
+from models import LegalArea, Tenant, User
 from security import passwords
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
@@ -38,6 +38,7 @@ def main() -> None:
         tenant = Tenant(name="Estudio de prueba local")
         db.add(tenant)
         db.flush()
+        db.add_all(LegalArea(tenant_id=tenant.tenant_id, name=name) for name in ("Civil", "Familia – Civil"))
         db.add(
             User(
                 tenant_id=tenant.tenant_id,

@@ -1,11 +1,12 @@
 import { Plus, Search } from "lucide-react";
 import { Badge, Card, Empty, Field } from "../../components/ui";
-import type { Case, Client, User } from "../../types";
+import type { Case, Client, LegalArea, User } from "../../types";
 import AreaSelect from "./components/AreaSelect";
 type Props = {
   actor?: User;
   cases: Case[];
   clients: Client[];
+  areas: LegalArea[];
   busy: boolean;
   search: string;
   setSearch: (value: string) => void;
@@ -25,6 +26,7 @@ export default function CasesPage({
   actor,
   cases,
   clients,
+  areas,
   busy,
   search,
   setSearch,
@@ -85,6 +87,8 @@ export default function CasesPage({
           </Field>
           <Field label="Rama del Derecho">
             <AreaSelect
+              name="area_id"
+              areas={areas}
               value={area}
               onChange={(e) => setArea(e.target.value)}
             />

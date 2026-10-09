@@ -2,7 +2,7 @@
 
 -- Selecciona en HeidiSQL la base de datos de Railway antes de ejecutar.
 
--- Esquema completo: crea las 11 tablas de Lexio desde cero, incluida clientes (lexio_clients).
+-- Esquema completo: crea las 12 tablas de Lexio desde cero, incluido el catálogo de ramas.
 
 -- Ejecutar una sola vez en la base vacía seleccionada. No requiere tablas anteriores.
 
@@ -71,9 +71,23 @@ CREATE TABLE lexio_audit (
 
 CREATE INDEX ix_lexio_audit_tenant_id ON lexio_audit (tenant_id);
 
+CREATE TABLE lexio_legal_areas (
+	name VARCHAR(80) COLLATE utf8mb4_bin NOT NULL,
+	id INTEGER NOT NULL AUTO_INCREMENT,
+	tenant_id INTEGER NOT NULL,
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (id),
+	CONSTRAINT uq_legal_area_tenant_id UNIQUE (tenant_id, id),
+	CONSTRAINT uq_legal_area_name UNIQUE (tenant_id, name),
+	CONSTRAINT ck_legal_area_name CHECK (length(trim(name)) > 0),
+	FOREIGN KEY(tenant_id) REFERENCES lexio_tenants (tenant_id)
+)ENGINE=InnoDB CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE INDEX ix_lexio_legal_areas_tenant_id ON lexio_legal_areas (tenant_id);
+
 CREATE TABLE lexio_cases (
 	client_id INTEGER NOT NULL, 
-	area VARCHAR(80) NOT NULL, 
+	area_id INTEGER NOT NULL, 
 	process_type VARCHAR(150) NOT NULL, 
 	initial_stage VARCHAR(100) NOT NULL, 
 	status VARCHAR(20) NOT NULL, 
@@ -86,6 +100,7 @@ CREATE TABLE lexio_cases (
 	UNIQUE (tenant_id, id), 
 	FOREIGN KEY(tenant_id, client_id) REFERENCES lexio_clients (tenant_id, id), 
 	FOREIGN KEY(tenant_id, responsible_id) REFERENCES lexio_users (tenant_id, id), 
+	CONSTRAINT fk_case_legal_area FOREIGN KEY(tenant_id, area_id) REFERENCES lexio_legal_areas (tenant_id, id) ON DELETE RESTRICT,
 	CONSTRAINT ck_case_status CHECK (status IN ('activo', 'concluido')), 
 	CONSTRAINT ck_case_fee CHECK (fee IS NULL OR fee > 0), 
 	FOREIGN KEY(tenant_id) REFERENCES lexio_tenants (tenant_id)

@@ -39,6 +39,9 @@ def setup():
         tenants = [m.Tenant(name="Estudio A"), m.Tenant(name="Estudio B")]
         db.add_all(tenants)
         db.flush()
+        for tenant in tenants:
+            db.add_all(m.LegalArea(tenant_id=tenant.tenant_id, name=name) for name in ("Civil", "Familia – Civil"))
+        db.flush()
         users = [
             m.User(
                 tenant_id=tenants[0].tenant_id,

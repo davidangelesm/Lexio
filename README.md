@@ -15,7 +15,9 @@ Las alertas se consultan en Inicio; se retiró la página separada de Alertas y 
 
 Cada caso tiene un único total de honorarios y cuotas por fecha. Las cuotas suman el total pactado. Registrar un abono lo aplica automáticamente a la primera cuota pendiente y después a las siguientes por número; opcionalmente se puede elegir otra cuota inicial. No hay créditos separados, servicios, eventos de pago ni confirmaciones adicionales. El saldo es honorarios menos abonos; concluir un caso conserva la deuda.
 
-El código del cliente tiene formato `CL-000001`, depende de su ID y se conserva al corregir nombre o documento. Las ramas son: Civil, Penal, Laboral, Tributario, Derecho corporativo, Constitucional, Familia, Familia – Civil, Administrativo, Conciliación extrajudicial y Fiscalía.
+En la vista de un caso activo, **Concluir caso** permite cerrar su atención con una confirmación breve. Está disponible para quienes tienen permiso de edición; conserva el historial y los avisos y cobros pendientes. El cierre usa el estado y la auditoría existentes, sin una migración adicional.
+
+El código del cliente tiene formato `CL-000001`, depende de su ID y se conserva al corregir nombre o documento. Las ramas se leen del catálogo `lexio_legal_areas` de cada estudio mediante la API. Los casos guardan `area_id`; corregir el nombre de una rama en MySQL actualiza el nombre mostrado en sus casos y reportes al cargar datos de nuevo. Para agregar o corregir ramas, seguir los [ejemplos SQL del catálogo](database/LEGAL_AREAS.md). La aplicación no contiene un listado fijo ni inserta ramas al arrancar.
 
 ## Acceso y permisos
 
@@ -30,6 +32,8 @@ Todas las tablas tienen `tenant_id`. El servidor obtiene el estudio del JWT vali
 ## Actualización desde el modelo anterior
 
 Para añadir asunto y tipo a la bitácora del esquema actual, usar la [migración aditiva](backend/MIGRATION_ENTRY_SUBJECTS.md). Está preparada y pendiente de revisión humana; no se aplicó a MySQL. Conserva los registros y debe aplicarse explícitamente antes del backend compatible. El procedimiento de reemplazo de datos de prueba que sigue corresponde a la transición anterior.
+
+Para convertir las ramas guardadas como texto en un catálogo por estudio, ejecutar una sola vez, previa revisión, [004_legal_areas.sql](database/004_legal_areas.sql) directamente en la base existente. Conserva los casos, prepara las once ramas iniciales y cualquier otro nombre existente, y establece su relación por ID. Este SQL tampoco se aplicó a MySQL. No usar `reset_demo_schema.py` para añadir el catálogo a una base cuyos registros deban conservarse.
 
 `backend/reset_demo_schema.py` reemplaza explícitamente las tablas de negocio anteriores por el modelo de cuatro módulos. Conserva estudios, usuarios, contraseñas y auditoría. **Elimina los datos de prueba y las asignaciones a sus casos.** Solo se debe usar en la base de prueba que David autorizó reiniciar; rechaza registros de otro estudio.
 

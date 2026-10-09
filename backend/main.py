@@ -1,11 +1,11 @@
 import os
 from datetime import timedelta
-from typing import Any
+from typing import Annotated, Any
 
 import domain as d
 import models as m
 import schemas as s
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from routing import ExactMoneyRoute
@@ -133,10 +133,19 @@ def update_client(key: int, data: s.ClientIn, db: Db, user: Actor) -> dict[str, 
     return d.public(row)
 
 
+@app.get("/legal-areas")
+def legal_areas(db: Db, user: Actor) -> list[dict[str, Any]]:
+    query = select(m.LegalArea).where(m.LegalArea.tenant_id == user.tenant_id).order_by(m.LegalArea.name)
+    return [{"id": area.id, "name": area.name} for area in db.scalars(query)]
+
+
 @app.get("/cases")
-def cases(db: Db, user: Actor, search: str = "", client_id: int | None = None, area: s.LegalArea | None = None, status: str | None = None) -> list[dict[str, Any]]:
+def cases(db: Db, user: Actor, search: str = "", client_id: int | None = None,
+        area_id: Annotated[int | None, Query(gt=0)] = None, status: str | None = None) -> list[dict[str, Any]]:
+    if area_id is not None:
+        d.get(db, m.LegalArea, area_id, user)
     query = d.case_scope(db, user)
-    for column, value in [(m.Case.client_id, client_id), (m.Case.area, area), (m.Case.status, status)]:
+    for column, value in [(m.Case.client_id, client_id), (m.Case.area_id, area_id), (m.Case.status, status)]:
         if value is not None:
             query = query.where(column == value)
     if search:
@@ -156,6 +165,7 @@ def create_case(data: s.CaseIn, db: Db, user: Actor) -> dict[str, Any]:
         raise HTTPException(403, "Los honorarios los registra el administrador financiero")
     if user.role == "admin":
         d.validate_plan(data.fee, data.installments)
+    d.get(db, m.LegalArea, data.area_id, user)
     target = d.get(db, m.User, data.responsible_id or user.id, user)
     if not target.active:
         raise HTTPException(422, "Responsable inactivo")
@@ -199,6 +209,8 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
     financial = {"fee", "installments"} & data.model_fields_set
     if financial or data.client is not None:
         admin(user)
+    if data.area_id is not None:
+        d.get(db, m.LegalArea, data.area_id, user)
     if data.client is not None:
         client = d.get(db, m.Client, row.client_id, user)
         previous = d.public(client)
@@ -480,13 +492,14 @@ def read_alert(key: int, db: Db, user: Actor) -> dict[str, str]:
 
 @app.get("/reports")
 def reports(db: Db, user: Actor) -> dict[str, Any]:
-    groups: dict[str, dict[str, Any]] = {}
+    groups: dict[int, dict[str, Any]] = {}
     for case in db.scalars(d.case_scope(db, user)):
-        if case.area not in groups:
-            groups[case.area] = {"area": case.area, "total_cases": 0, "active_cases": 0, "concluded_cases": 0}
+        if case.area_id not in groups:
+            groups[case.area_id] = {"area_id": case.area_id, "area": d.get(db, m.LegalArea, case.area_id, user).name,
+                "total_cases": 0, "active_cases": 0, "concluded_cases": 0}
             if user.role == "admin":
-                groups[case.area].update({"fee": d.ZERO, "paid": d.ZERO, "balance": d.ZERO})
-        row = groups[case.area]
+                groups[case.area_id].update({"fee": d.ZERO, "paid": d.ZERO, "balance": d.ZERO})
+        row = groups[case.area_id]
         row["total_cases"] += 1
         row["active_cases" if case.status == "activo" else "concluded_cases"] += 1
         if user.role == "admin":

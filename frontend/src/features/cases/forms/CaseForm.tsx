@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { Field, Form } from "../../../components/ui";
 import { casesService } from "../../../services/cases";
-import type { Case, Client, User } from "../../../types";
+import type { Case, Client, LegalArea, User } from "../../../types";
 import type { CaseInput, InstallmentInput } from "../../../types/requests";
 import { str } from "../../../utils/form";
 import { localDate, money } from "../../../utils/format";
 import AreaSelect from "../components/AreaSelect";
-import { legalArea } from "../models/legalAreas";
 type Props = {
   actor: User;
   users: User[];
   clients: Client[];
+  areas: LegalArea[];
   item?: Case;
   clientId?: number;
   saved: (item: Case) => void;
@@ -24,6 +24,7 @@ export default function CaseForm({
   actor,
   users,
   clients,
+  areas,
   item,
   clientId,
   saved,
@@ -55,8 +56,15 @@ export default function CaseForm({
     <Form
       label={item ? "Guardar cambios" : "Crear caso"}
       submit={async (form) => {
+        const selectedArea = Number(str(form, "area_id"));
+        if (!areas.some((area) => area.id === selectedArea))
+          throw new Error(
+            areas.length
+              ? "Selecciona una rama del catálogo."
+              : "El administrador debe configurar el catálogo de ramas antes de registrar o editar casos.",
+          );
         const data: Omit<CaseInput, "client_id"> = {
-          area: legalArea(str(form, "area")),
+          area_id: selectedArea,
           process_type: str(form, "process_type"),
           initial_stage: str(form, "initial_stage"),
           status: str(form, "status") as CaseInput["status"],
@@ -118,7 +126,12 @@ export default function CaseForm({
         <h3>Tipo de proceso</h3>
       </div>
       <Field label="Rama del Derecho">
-        <AreaSelect name="area" defaultValue={item?.area} required />
+        <AreaSelect
+          name="area_id"
+          areas={areas}
+          defaultValue={item?.area_id}
+          required
+        />
       </Field>
       <Field label="Tipo de proceso">
         <input

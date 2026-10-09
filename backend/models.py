@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, ForeignKeyConstraint, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, ForeignKeyConstraint, Integer, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
@@ -51,15 +51,28 @@ class Client(Entity, Base):
     address: Mapped[str] = mapped_column(String(250), default="")
 
 
+class LegalArea(Entity, Base):
+    __tablename__ = "lexio_legal_areas"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_legal_area_tenant_id"),
+        UniqueConstraint("tenant_id", "name", name="uq_legal_area_name"),
+        CheckConstraint("length(trim(name)) > 0", name="ck_legal_area_name"),
+    )
+    name: Mapped[str] = mapped_column(String(80).with_variant(String(80, collation="utf8mb4_bin"), "mysql"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, server_default=text("CURRENT_TIMESTAMP"))
+
+
 class Case(Entity, Base):
     __tablename__ = "lexio_cases"
     __table_args__ = (
         UniqueConstraint("tenant_id", "id"), ref("client_id", "clients"), ref("responsible_id", "users"),
+        ForeignKeyConstraint(["tenant_id", "area_id"], ["lexio_legal_areas.tenant_id", "lexio_legal_areas.id"],
+            name="fk_case_legal_area", ondelete="RESTRICT"),
         CheckConstraint("status IN ('activo', 'concluido')", name="ck_case_status"),
         CheckConstraint("fee IS NULL OR fee > 0", name="ck_case_fee"),
     )
     client_id: Mapped[int] = mapped_column(Integer)
-    area: Mapped[str] = mapped_column(String(80))
+    area_id: Mapped[int] = mapped_column(Integer)
     process_type: Mapped[str] = mapped_column(String(150))
     initial_stage: Mapped[str] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(20), default="activo")

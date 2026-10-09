@@ -1,9 +1,17 @@
-import { ArrowLeft, Plus, Pencil, Users } from "lucide-react";
+import { ArrowLeft, Check, Plus, Pencil, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge, Card, Empty, Modal } from "../../components/ui";
 import { casesService } from "../../services/cases";
 import { financeService } from "../../services/finance";
-import type { Case, CaseTab, Client, Entry, Payment, User } from "../../types";
+import type {
+  Case,
+  CaseTab,
+  Client,
+  Entry,
+  LegalArea,
+  Payment,
+  User,
+} from "../../types";
 import { dateLabel, money } from "../../utils/format";
 import CaseForm from "./forms/CaseForm";
 import EntryForm from "./forms/EntryForm";
@@ -15,6 +23,7 @@ type Props = {
   actor: User;
   users: User[];
   clients: Client[];
+  areas: LegalArea[];
   initialTab?: CaseTab;
   back: () => void;
 };
@@ -23,6 +32,7 @@ export default function CaseWorkspace({
   actor,
   users,
   clients,
+  areas,
   initialTab = "bitacora",
   back,
 }: Props) {
@@ -79,6 +89,19 @@ export default function CaseWorkspace({
           </p>
         </div>
         <div className="actions">
+          {canEdit && item.status === "activo" && (
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => {
+                setError("");
+                setModal("concluir");
+              }}
+            >
+              <Check size={15} />
+              Concluir caso
+            </button>
+          )}
           {canEdit && (
             <button className="secondary" onClick={() => setModal("caso")}>
               <Pencil size={15} />
@@ -335,27 +358,82 @@ export default function CaseWorkspace({
       {modal && (
         <Modal
           title={
-            modal === "caso"
-              ? "Editar caso"
-              : modal === "pago"
-                ? "Registrar abono"
-                : modal === "equipo"
-                  ? "Equipo autorizado"
-                  : editEntry
-                    ? "Editar actuación"
-                    : "Registrar actuación"
+            modal === "concluir"
+              ? "Concluir caso"
+              : modal === "caso"
+                ? "Editar caso"
+                : modal === "pago"
+                  ? "Registrar abono"
+                  : modal === "equipo"
+                    ? "Equipo autorizado"
+                    : editEntry
+                      ? "Editar actuación"
+                      : "Registrar actuación"
           }
           close={() => {
+            if (modal === "concluir" && busy) return;
             setModal("");
             setEditEntry(undefined);
           }}
         >
+          {modal === "concluir" && (
+            <>
+              <p>
+                ¿Dar por concluido el caso <strong>{item.process_type}</strong>{" "}
+                de <strong>{item.client.name}</strong>?
+              </p>
+              <p className="notice">
+                El caso quedará como Concluido. Su historial se conserva y las
+                alertas y los cobros pendientes siguen vigentes.
+              </p>
+              {error && (
+                <p className="error" role="alert">
+                  {error}
+                </p>
+              )}
+              <div className="actions">
+                <button
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() => setModal("")}
+                >
+                  Mantener activo
+                </button>
+                <button
+                  className="primary"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    setError("");
+                    try {
+                      const updated = await casesService.update(item.id, {
+                        status: "concluido",
+                      });
+                      setItem(updated);
+                      setModal("");
+                    } catch (e) {
+                      setError(
+                        e instanceof Error
+                          ? e.message
+                          : "No se pudo concluir el caso.",
+                      );
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  {busy ? "Concluyendo…" : "Confirmar cierre"}
+                </button>
+              </div>
+            </>
+          )}
           {modal === "caso" && (
             <CaseForm
               item={item}
               actor={actor}
               users={users}
               clients={clients}
+              areas={areas}
               saved={(updated) => {
                 setItem(updated);
                 setModal("");

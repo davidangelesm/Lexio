@@ -130,6 +130,7 @@ def installment_view(db: Session, user: m.User, item: m.Installment) -> dict[str
 def case_view(db: Session, user: m.User, item: m.Case) -> dict[str, Any]:
     data = {
         **public(item, {"fee"}),
+        "area": get(db, m.LegalArea, item.area_id, user).name,
         "client": public(get(db, m.Client, item.client_id, user)),
         "responsible_name": get(db, m.User, item.responsible_id, user).name,
         "access_level": access_level(db, user, item.id),
