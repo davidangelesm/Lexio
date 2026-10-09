@@ -10,7 +10,7 @@ from test_integral_flow import abono, create, ficha
 def test_tenant_isolation_every_resource_and_relations(setup):
     client, headers, ids, engine = setup
     case = create(setup)
-    entry = client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "description": "Acto", "alert_date": "2026-10-15"}).json()
+    entry = client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "subject": "Acto", "description": "Acto", "alert_date": "2026-10-15"}).json()
     payment = abono(client, headers[0], case, "50.00").json()
     assert client.get("/cases", headers=headers[2]).json() == []
     assert client.get("/clients", headers=headers[2]).json() == []
@@ -50,8 +50,8 @@ def test_staff_case_permissions_and_financial_privacy(setup):
     assert client.get("/audit", headers=headers[1]).status_code == 403
     assert abono(client, headers[1], case, "20.00").status_code == 403
     assert client.get(f"/cases/{case['id']}/access", headers=headers[1]).status_code == 403
-    assert client.post(f"/cases/{case['id']}/entries", headers=headers[1], json={"action_date": "2026-10-08", "description": "Cambio"}).status_code == 404
-    entry = client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "description": "Acto", "alert_date": "2026-10-15"}).json()
+    assert client.post(f"/cases/{case['id']}/entries", headers=headers[1], json={"action_date": "2026-10-08", "subject": "Cambio", "description": "Cambio"}).status_code == 404
+    entry = client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "subject": "Acto", "description": "Acto", "alert_date": "2026-10-15"}).json()
     assert not client.get("/entries", headers=headers[1]).json()[0]["can_attend"]
     assert client.post(f"/entries/{entry['id']}/attend", headers=headers[1]).status_code == 404
     alerts = client.get("/alerts", headers=headers[1]).json()
@@ -85,7 +85,7 @@ def test_staff_can_register_operational_ficha_and_admin_completes_finances(setup
     assert admin_case["fee"] is None and admin_case["balance"] is None
     complete = client.put(f"/cases/{case['id']}", headers=headers[0], json={"fee": "1000.00", "installments": ficha()["installments"]})
     assert complete.status_code == 200 and complete.json()["balance"] == "1000.00"
-    assert client.post(f"/cases/{case['id']}/entries", headers=headers[1], json={"action_date": "2026-10-08", "description": "Acto", "registered_by": ids[0]}).status_code == 422
+    assert client.post(f"/cases/{case['id']}/entries", headers=headers[1], json={"action_date": "2026-10-08", "subject": "Acto", "description": "Acto", "registered_by": ids[0]}).status_code == 422
 
 
 def test_reassigning_responsible_promotes_read_access(setup):
@@ -101,7 +101,7 @@ def test_reassigning_responsible_promotes_read_access(setup):
 def test_notifications_are_private_and_attended_hides_every_recipient(setup):
     client, headers, ids, engine = setup
     case = create(setup, responsible_id=ids[1])
-    entry = client.post(f"/cases/{case['id']}/entries", headers=headers[1], json={"action_date": "2026-10-08", "description": "Acto", "alert_date": "2026-10-15"}).json()
+    entry = client.post(f"/cases/{case['id']}/entries", headers=headers[1], json={"action_date": "2026-10-08", "subject": "Acto", "description": "Acto", "alert_date": "2026-10-15"}).json()
     admin_alert = next(x for x in client.get("/alerts", headers=headers[0]).json() if x["kind"] == "legal")
     staff_alert = client.get("/alerts", headers=headers[1]).json()[0]
     assert client.post(f"/alerts/{staff_alert['id']}/read", headers=headers[0]).status_code == 404

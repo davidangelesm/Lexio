@@ -114,6 +114,8 @@ CREATE INDEX ix_lexio_access_tenant_id ON lexio_access (tenant_id);
 CREATE TABLE lexio_entries (
 	case_id INTEGER NOT NULL, 
 	action_date DATE NOT NULL, 
+	subject VARCHAR(150) NOT NULL, 
+	subject_type VARCHAR(20) NOT NULL, 
 	description TEXT NOT NULL, 
 	alert_date DATE, 
 	attended BOOL NOT NULL, 
@@ -125,6 +127,7 @@ CREATE TABLE lexio_entries (
 	UNIQUE (tenant_id, id), 
 	FOREIGN KEY(tenant_id, case_id) REFERENCES lexio_cases (tenant_id, id), 
 	FOREIGN KEY(tenant_id, registered_by) REFERENCES lexio_users (tenant_id, id), 
+	CONSTRAINT ck_entry_subject_type CHECK (subject_type IN ('legal', 'otro')), 
 	FOREIGN KEY(tenant_id) REFERENCES lexio_tenants (tenant_id)
 )ENGINE=InnoDB CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
 

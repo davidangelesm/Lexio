@@ -11,7 +11,7 @@ from test_integral_flow import create
 
 
 def entry_data(**changes):
-    return {"action_date": "2026-10-08", "description": "Presentar escrito", "alert_date": "2026-10-15", **changes}
+    return {"action_date": "2026-10-08", "subject": "Presentar escrito", "description": "Presentar escrito", "alert_date": "2026-10-15", **changes}
 
 
 def new_entry(setup, **changes):
@@ -26,10 +26,11 @@ def legal_alerts(client, headers):
     return [x for x in client.get("/alerts", headers=headers).json() if x["kind"] == "legal"]
 
 
-def test_edit_three_entry_fields_preserves_creation_and_audits_editor(setup):
+def test_edit_entry_fields_preserves_creation_and_audits_editor(setup):
     client, headers, ids, engine = setup
     case, entry = new_entry(setup)
-    corrected = entry_data(action_date="2026-10-07", description="Presentar escrito corregido", alert_date="2026-10-16")
+    corrected = entry_data(action_date="2026-10-07", subject="Enviar documentos", subject_type="otro",
+        description="Enviar documentos corregidos", alert_date="2026-10-16")
     response = client.put(f"/entries/{entry['id']}", headers=headers[0], json=corrected)
     assert response.status_code == 200, response.text
     updated = response.json()
@@ -44,6 +45,10 @@ def test_edit_three_entry_fields_preserves_creation_and_audits_editor(setup):
         changes = json.loads(audit.changes)
         assert changes["before"]["description"] == entry["description"]
         assert changes["after"]["description"] == corrected["description"]
+        assert changes["before"]["subject"] == entry["subject"]
+        assert changes["after"]["subject"] == corrected["subject"]
+        assert changes["before"]["subject_type"] == "legal"
+        assert changes["after"]["subject_type"] == "otro"
         assert changes["before"]["registered_by"] == changes["after"]["registered_by"] == ids[1]
         assert changes["before"]["created_at"] == changes["after"]["created_at"]
 
@@ -161,8 +166,10 @@ def test_editing_attended_entry_keeps_attended_and_never_restores_alerts(setup):
     legal_alerts(client, headers[1])
     assert client.post(path + "/attend", headers=headers[1]).status_code == 200
     for alert_date in ("2026-10-09", None, "2026-10-15"):
-        result = client.put(path, headers=headers[0], json=entry_data(description="Actuación ya atendida", alert_date=alert_date))
+        result = client.put(path, headers=headers[0], json=entry_data(subject_type="otro", description="Actuación ya atendida", alert_date=alert_date))
         assert result.status_code == 200 and result.json()["attended"] is True
-        assert legal_alerts(client, headers[0]) == [] and legal_alerts(client, headers[1]) == []
+        assert not result.json()["can_attend"]
+        for header in headers[:2]:
+            assert all(x["kind"] == "pago" for x in client.get("/alerts", headers=header).json())
     with Session(engine) as db:
         assert all(x.status == "cancelado" for x in db.scalars(select(m.Notice).where(m.Notice.kind == "legal")))

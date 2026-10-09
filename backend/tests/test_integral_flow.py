@@ -36,7 +36,7 @@ def test_ficha_bitacora_alertas_abonos_reportes(setup):
     assert case["initial_stage"] == "Demanda"
     assert case["paid"] == "0.00" and case["balance"] == "1000.00"
     entry = client.post(f"/cases/{case['id']}/entries", headers=headers[1],
-        json={"action_date": "2026-10-07", "description": "Presentar escrito", "alert_date": "2026-10-15"})
+        json={"action_date": "2026-10-07", "subject": "Presentar escrito", "description": "Presentar escrito", "alert_date": "2026-10-15"})
     assert entry.status_code == 201
     entry = entry.json()
     assert entry["registered_by"] == ids[1] and entry["responsible_name"] == "Abogado"
@@ -103,7 +103,7 @@ def test_payment_correction_and_dates_keep_plan_identity(setup, monkeypatch):
 def test_three_business_day_reminders_read_and_urgent(setup, monkeypatch):
     client, headers, _, _ = setup
     case = create(setup)
-    entry = client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "description": "Apelar", "alert_date": "2026-10-15"}).json()
+    entry = client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "subject": "Apelar", "description": "Apelar", "alert_date": "2026-10-15"}).json()
     for when, anticipation in [(date(2026, 10, 8), 5), (date(2026, 10, 12), 3), (date(2026, 10, 14), 1), (date(2026, 10, 15), 0)]:
         monkeypatch.setattr(d, "today", lambda when=when: when)
         legal = [x for x in client.get("/alerts", headers=headers[0]).json() if x["kind"] == "legal"]
@@ -124,7 +124,7 @@ def test_three_business_day_reminders_read_and_urgent(setup, monkeypatch):
 def test_weekend_does_not_generate_notifications(setup, monkeypatch):
     client, headers, _, engine = setup
     case = create(setup)
-    client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "description": "Vence lunes", "alert_date": "2026-10-12"})
+    client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "subject": "Vence lunes", "description": "Vence lunes", "alert_date": "2026-10-12"})
     monkeypatch.setattr(d, "today", lambda: date(2026, 10, 10))
     assert client.get("/alerts", headers=headers[0]).json() == []
     with Session(engine) as db:
@@ -137,7 +137,7 @@ def test_weekend_does_not_generate_notifications(setup, monkeypatch):
 def test_only_latest_reminder_is_visible_and_read_hides_older_pending(setup, monkeypatch):
     client, headers, _, engine = setup
     case = create(setup)
-    client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "description": "Vence mañana", "alert_date": "2026-10-09"})
+    client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "subject": "Vence mañana", "description": "Vence mañana", "alert_date": "2026-10-09"})
     legal = [x for x in client.get("/alerts", headers=headers[0]).json() if x["kind"] == "legal"]
     assert len(legal) == 1 and legal[0]["anticipation"] == 1
     with Session(engine) as db:
@@ -154,7 +154,7 @@ def test_only_latest_reminder_is_visible_and_read_hides_older_pending(setup, mon
 def test_weekend_deadline_keeps_last_reminder_until_weekday(setup, monkeypatch):
     client, headers, _, _ = setup
     case = create(setup)
-    client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "description": "Vence sábado", "alert_date": "2026-10-10"})
+    client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "subject": "Vence sábado", "description": "Vence sábado", "alert_date": "2026-10-10"})
     monkeypatch.setattr(d, "today", lambda: date(2026, 10, 9))
     legal = [x for x in client.get("/alerts", headers=headers[0]).json() if x["kind"] == "legal"]
     last = next(x for x in legal if x["anticipation"] == 1)

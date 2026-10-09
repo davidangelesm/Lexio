@@ -397,9 +397,9 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
     sources: dict[str, dict[str, Any]] = {}
     for entry in db.scalars(select(m.Entry).where(m.Entry.tenant_id == user.tenant_id, m.Entry.case_id.in_(cases), m.Entry.alert_date.is_not(None), m.Entry.attended.is_(False))):
         sources[f"legal:{entry.id}"] = {
-            "case_id": entry.case_id, "kind": "legal", "target_date": entry.alert_date,
-            "description": entry.description, "entry_id": entry.id,
-            "responsible_name": d.get(db, m.User, entry.registered_by, user).name,
+            "case_id": entry.case_id, "kind": entry.subject_type, "target_date": entry.alert_date,
+            "subject": entry.subject, "description": entry.description, "entry_id": entry.id,
+            "responsible_name": d.get(db, m.User, cases[entry.case_id].responsible_id, user).name,
             "can_attend": d.access_level(db, user, entry.case_id) == "edit",
         }
     if user.role == "admin":
@@ -460,6 +460,7 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
         client = d.get(db, m.Client, cases[notice.case_id].client_id, user)
         result.append({
             "id": notice.id, **data, "client_code": d.public(client)["code"], "client_name": client.name,
+            "case_code": d.public(cases[notice.case_id])["code"], "process_type": cases[notice.case_id].process_type,
             "notice_date": notice.notice_date, "anticipation": notice.anticipation, "urgent": urgent,
         })
     return sorted(result, key=lambda x: (not x["urgent"], x["target_date"], x["notice_date"], x["id"]))
@@ -510,7 +511,7 @@ def dashboard(db: Db, user: Actor) -> dict[str, Any]:
         "concluded_cases": sum(x.status == "concluido" for x in cases.values()),
         "pending_legal_alerts": db.scalar(select(func.count(m.Entry.id)).where(
             m.Entry.tenant_id == user.tenant_id, m.Entry.case_id.in_(cases),
-            m.Entry.alert_date.is_not(None), m.Entry.attended.is_(False),
+            m.Entry.subject_type == "legal", m.Entry.alert_date.is_not(None), m.Entry.attended.is_(False),
         )),
     }}
     if user.role == "admin":
@@ -529,14 +530,12 @@ def dashboard(db: Db, user: Actor) -> dict[str, Any]:
             case = cases[item.case_id]
             client = d.get(db, m.Client, case.client_id, user)
             result["upcoming_payments"].append({
-                "id": item.id, "case_id": case.id, "process_type": case.process_type,
+                "id": item.id, "case_id": case.id, "case_code": d.public(case)["code"], "process_type": case.process_type,
                 "client_code": d.public(client)["code"], "client_name": client.name,
                 "number": item.number, "due_date": item.due_date,
                 "amount": item.amount, "paid": paid, "balance": item.amount - paid,
                 "responsible_name": d.get(db, m.User, case.responsible_id, user).name,
             })
-            if len(result["upcoming_payments"]) == 10:
-                break
     return result
 
 

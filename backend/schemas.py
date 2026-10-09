@@ -102,6 +102,8 @@ class Grant(Input):
 
 class EntryIn(Input):
     action_date: date
+    subject: str = Field(min_length=1, max_length=150)
+    subject_type: Literal["legal", "otro"] = "legal"
     description: str = Field(min_length=1, max_length=10000)
     alert_date: date | None = None
 

@@ -15,9 +15,10 @@ def test_dashboard_counts_finances_and_upcoming_partial_overdue_payments(setup):
     ])
     assert abono(client, headers[0], case, "400.00").status_code == 201
     for values in [
-        {"description": "Obligación próxima", "alert_date": "2026-10-15"},
-        {"description": "Obligación futura", "alert_date": "2026-12-01"},
-        {"description": "Solo actuación"},
+        {"subject": "Obligación próxima", "description": "Obligación próxima", "alert_date": "2026-10-15"},
+        {"subject": "Obligación futura", "description": "Obligación futura", "alert_date": "2026-12-01"},
+        {"subject": "Solo actuación", "description": "Solo actuación"},
+        {"subject": "Enviar documentos", "subject_type": "otro", "description": "Reunir los anexos", "alert_date": "2026-10-15"},
     ]:
         assert client.post(f"/cases/{case['id']}/entries", headers=headers[1], json={"action_date": "2026-10-08", **values}).status_code == 201
     # Leer un recordatorio no completa la obligación ni modifica el conteo del panel.
@@ -31,7 +32,7 @@ def test_dashboard_counts_finances_and_upcoming_partial_overdue_payments(setup):
     upcoming = dashboard["upcoming_payments"]
     assert len(upcoming) == 2
     assert upcoming[0] == {
-        "id": case["installments"][0]["id"], "case_id": case["id"], "process_type": "Cobro de deuda",
+        "id": case["installments"][0]["id"], "case_id": case["id"], "case_code": case["code"], "process_type": "Cobro de deuda",
         "client_code": case["client"]["code"], "client_name": "María Torres", "number": 1,
         "due_date": "2026-10-07", "amount": "500.00", "paid": "400.00", "balance": "100.00", "responsible_name": "Abogado",
     }
@@ -49,15 +50,15 @@ def test_dashboard_counts_finances_and_upcoming_partial_overdue_payments(setup):
         assert [(x.id, x.status, x.read_at) for x in db.scalars(select(m.Notice))] == before
 
 
-def test_dashboard_payment_window_limit_and_paid_installments_omitted(setup):
+def test_dashboard_payment_window_includes_all_unpaid_installments(setup):
     client, headers, _, _ = setup
     plan = [{"amount": "100.00", "due_date": (date(2026, 10, 7) + timedelta(days=i)).isoformat()} for i in range(12)]
     plan.append({"amount": "100.00", "due_date": "2026-11-08"})
     case = create(setup, fee="1300.00", installments=plan)
     assert abono(client, headers[0], case, "100.00").status_code == 201
     upcoming = client.get("/dashboard", headers=headers[0]).json()["upcoming_payments"]
-    assert len(upcoming) == 10
-    assert [x["number"] for x in upcoming] == list(range(2, 12))
+    assert len(upcoming) == 11
+    assert [x["number"] for x in upcoming] == list(range(2, 13))
     assert [x["due_date"] for x in upcoming] == sorted(x["due_date"] for x in upcoming)
     assert all(x["id"] != case["installments"][0]["id"] for x in upcoming)
     assert abono(client, headers[0], case, "1100.00").status_code == 201
@@ -70,7 +71,7 @@ def test_dashboard_payment_window_limit_and_paid_installments_omitted(setup):
 def test_dashboard_isolates_tenants_and_excludes_staff_financial_data(setup):
     client, headers, ids, _ = setup
     case = create(setup)
-    client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "description": "Plazo legal", "alert_date": "2026-10-15"})
+    client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={"action_date": "2026-10-08", "subject": "Plazo legal", "description": "Plazo legal", "alert_date": "2026-10-15"})
     assert client.get("/dashboard", headers=headers[1]).json() == {
         "counts": {"total_cases": 0, "active_cases": 0, "concluded_cases": 0, "pending_legal_alerts": 0},
     }

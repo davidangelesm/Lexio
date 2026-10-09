@@ -65,7 +65,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
-Cada que hagas una modificacion en la aplicacion, no toques ni git, ni compiles la aplicación, todas estas actividades tienen que pasar antes por revision humana antes de desplegarse
+No es necesario que ejecutes git, una vez los cambios sean probados se subira por parte del usuario
 
 # Lexio: contexto e instrucciones del proyecto
 
@@ -99,17 +99,18 @@ Fase 2: comercialización SaaS multi-tenant. Diseñar para esta fase desde el pr
 
 ## Flujo simplificado acordado el 8 de octubre de 2026
 
-- La ficha integral describe los datos que recibe el sistema, no una pantalla única ni una secuencia obligatoria. La navegación es Inicio, Clientes, Casos, Alertas, Reportes y Administración. Administración conserva cuentas e historial legible. No reintroducir servicios, eventos, créditos separados o tareas independientes de la bitácora.
+- La ficha integral describe los datos que recibe el sistema, no una pantalla única ni una secuencia obligatoria. La navegación es Inicio, Clientes, Casos, Reportes y Administración. Inicio reúne las alertas; se retiró la página separada de Alertas y vencimientos. Administración conserva cuentas e historial legible. No reintroducir servicios, eventos, créditos separados o tareas independientes de la bitácora.
 - Clientes registra los datos personales y el código estable generado `CL-ID`. Casos selecciona un cliente existente y registra rama del catálogo, tipo de proceso, una etapa de ingreso, estado Activo/Concluido, honorarios y cuotas por fecha. Un cliente puede tener varios casos; el control financiero pertenece al caso. Corregir datos del cliente se hace en Clientes.
-- Inicio muestra el panel del día con indicadores, alertas y, solo para administrador, cuotas impagas vencidas o próximas a 30 días. Los datos del panel respetan el mismo aislamiento y permisos que los casos. La bitácora está dentro de cada caso; no tiene una vista general en la navegación.
+- Inicio muestra las tablas Alertas procesales y otros y, solo para administrador, Alerta de cobros con cuotas impagas vencidas o próximas a 30 días, sin recortar el número de filas. La primera muestra cliente y caso, tipo Legal/Otro, vencimiento, abogado responsable del caso, asunto corto y acciones. Ver caso abre Bitácora desde asuntos y Control financiero desde cobros. Cada caso conserva arriba los datos del cliente y proceso y luego las pestañas Bitácora y Control financiero; finanzas solo para administrador. Los datos del panel respetan el mismo aislamiento y permisos que los casos.
 - Un asistente autorizado puede ver el cliente que acaba de registrar mientras todavía no tenga casos. La autoría se comprueba en la auditoría del mismo tenant. Cuando el cliente tiene casos, la visibilidad depende exclusivamente de los casos asignados; revocar acceso sigue ocultando sus datos.
-- Cada actuación registra fecha manual, descripción, alerta opcional, abogado autenticado y timestamp automático. Atendido resuelve únicamente obligaciones legales; los cobros se resuelven mediante abonos.
-- Las actuaciones se pueden editar con permiso de edición sobre el caso: fecha de actuación, descripción y fecha de alerta. El autor, la hora original y el estado Atendido se conservan; la auditoría registra la corrección. Cambiar o retirar el vencimiento actualiza los avisos de todos los destinatarios; corregir solo el texto no reactiva avisos leídos.
+- Cada actuación registra fecha manual, asunto obligatorio de hasta 150 caracteres, tipo de asunto Legal/Otro, descripción detallada, alerta opcional, abogado autenticado y timestamp automático. Inicio muestra el asunto; la bitácora conserva la descripción completa. Atendido resuelve asuntos Legal y Otro con permiso de edición; los cobros se resuelven mediante abonos.
+- Las actuaciones se pueden editar con permiso de edición sobre el caso: fecha de actuación, asunto, tipo, descripción y fecha de alerta. El autor, la hora original y el estado Atendido se conservan; la auditoría registra la corrección. Cambiar o retirar el vencimiento actualiza los avisos de todos los destinatarios; corregir solo asunto, tipo o descripción no reactiva avisos leídos.
 - Los avisos usan exactamente 5, 3 y 1 días hábiles (lunes a viernes, sin feriados) y conservan la fecha límite original. Leer descarta un aviso; un vencimiento pendiente después de su fecha es urgente.
 - Cada obligación muestra solo su recordatorio más reciente. Leer no vuelve a mostrar anticipaciones anteriores; el próximo recordatorio aparece en su fecha. En fines de semana se conservan avisos existentes sin generar nuevos.
 - Un abono se distribuye automáticamente por número de cuota; puede elegirse otra cuota inicial. Las aplicaciones son internas, sin un paso adicional para el abogado. El saldo es honorarios menos abonos; concluir no elimina deuda.
 - Reportes agrupa por rama: total/activos/concluidos y, solo para administrador, honorarios/cobrado/saldo. El backend excluye datos financieros de todas las respuestas para otros roles.
 - Equipo autorizado identifica al administrador por su rol y lo muestra con acceso permanente, sin botón Retirar acceso. Las autorizaciones del administrador sobre todos los casos del estudio provienen de su rol.
 - Cambios de esquema son explícitos. `reset_demo_schema.py` migra la base de prueba conservando estudios, cuentas, contraseñas y auditoría; nunca ejecutar DDL en el arranque de FastAPI. Todas las relaciones mantienen aislamiento por tenant.
+- La migración aditiva `database/003_entry_subjects.sql` prepara asunto y tipo en actuaciones existentes sin borrar datos; se ejecuta directamente en la base una sola vez, previa revisión humana, antes de desplegar el backend compatible. No usar `reset_demo_schema.py` para añadir estos campos a una base con registros que deban conservarse.
 - Los botones de acción deben tener borde o fondo visible; evitar acciones que parezcan texto sin delimitación. Priorizar formularios breves con nombres comprensibles.
 - El esquema simplificado se aplicó explícitamente en MySQL el 8 de octubre: 11 tablas, cuentas y contraseñas preservadas, negocio de prueba vacío. El flujo nuevo se comprobó contra MySQL con rollback; desplegar el backend compatible es independiente de esa verificación.

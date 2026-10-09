@@ -81,9 +81,14 @@ class Access(Entity, Base):
 
 class Entry(Entity, Base):
     __tablename__ = "lexio_entries"
-    __table_args__ = (UniqueConstraint("tenant_id", "id"), ref("case_id", "cases"), ref("registered_by", "users"))
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"), ref("case_id", "cases"), ref("registered_by", "users"),
+        CheckConstraint("subject_type IN ('legal', 'otro')", name="ck_entry_subject_type"),
+    )
     case_id: Mapped[int] = mapped_column(Integer)
     action_date: Mapped[date] = mapped_column(Date)
+    subject: Mapped[str] = mapped_column(String(150))
+    subject_type: Mapped[str] = mapped_column(String(20), default="legal")
     description: Mapped[str] = mapped_column(Text)
     alert_date: Mapped[date | None] = mapped_column(Date)
     attended: Mapped[bool] = mapped_column(default=False)

@@ -154,7 +154,8 @@ def entry_view(db: Session, user: m.User, item: m.Entry) -> dict[str, Any]:
         **public(item), "client_code": public(client)["code"], "client_name": client.name,
         "process_type": case.process_type,
         "responsible_name": get(db, m.User, item.registered_by, user).name,
-        "can_attend": access_level(db, user, case.id) == "edit",
+        "can_attend": item.alert_date is not None and not item.attended
+            and access_level(db, user, case.id) == "edit",
     }
 
 
