@@ -1,50 +1,53 @@
 import type { Client } from "./clients";
-
+export interface Installment {
+  id: number;
+  number: number;
+  amount: string;
+  due_date: string;
+  paid: string;
+  balance: string;
+  state: string;
+}
+export interface Payment {
+  id: number;
+  payment_date: string;
+  amount: string;
+  method: string;
+  registered_by: number;
+  created_at: string;
+}
 export interface Case {
   id: number;
   code: string;
   client_id: number;
   client: Client;
   area: string;
-  subject: string;
-  description: string;
+  process_type: string;
   initial_stage: string;
-  current_stage: string;
-  status: string;
-  start_date: string;
+  status: "activo" | "concluido";
   responsible_id: number;
-  reference: string;
+  responsible_name: string;
+  created_at: string;
   access_level: "read" | "edit";
+  fee?: string | null;
+  paid?: string;
+  balance?: string;
+  cancelled?: boolean;
+  installments?: Installment[];
+  payments?: Payment[];
 }
 export interface Entry {
   id: number;
   case_id: number;
   action_date: string;
   description: string;
-  created_at: string;
+  alert_date: string | null;
+  attended: boolean;
   registered_by: number;
-  is_payment_event: boolean;
-  client?: Client;
-  case_code?: string;
-}
-export interface Task {
-  id: number;
-  case_id: number;
-  entry_id: number | null;
-  description: string;
-  due_date: string;
-  responsible_id: number;
-  status: string;
-  client?: Client;
-  case_code?: string;
-}
-export interface Event {
-  id: number;
-  description: string;
-  entry_id: number | null;
-  scheduled_date: string | null;
-  effective_date: string | null;
-  effective_kind: string | null;
-  revision: number;
-  reviewed_revision: number;
+  responsible_name: string;
+  created_at: string;
+  client_code: string;
+  client_name: string;
+  process_type: string;
+  can_attend?: boolean;
 }

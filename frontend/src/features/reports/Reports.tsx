@@ -1,99 +1,93 @@
-import ReportCaseTable from "../../features/reports/components/ReportCaseTable";
-import type { Case, User } from "../../types/index";
-import CollectionsReport from "./components/CollectionsReport";
-import EconomicReport from "./components/EconomicReport";
-import OperationalReport from "./components/OperationalReport";
-import ReportFilters from "./components/ReportFilters";
-import { useReports } from "./hooks/useReports";
-
-export default function Reports({
-  actor,
-  users,
-  openCase,
-}: {
-  actor: User;
-  users: User[];
-  openCase: (id: number) => void;
-}) {
-  const {
-    filters,
-    setFilters,
-    clients,
-    cases,
-    services,
-    userName,
-    tab,
-    setTab,
-    busy,
-    load,
-    error,
-    operational,
-    setDetailFilter,
-    detailFilter,
-    economic,
-    collections,
-  } = useReports({ actor, users, openCase });
-
-  const caseRows = (list: Case[]) => (
-    <ReportCaseTable list={list} openCase={openCase} userName={userName} />
+import { RefreshCw } from "lucide-react";
+import { Card, Empty } from "../../components/ui";
+import type { Report, ReportTotals } from "../../types";
+import { money } from "../../utils/format";
+type Props = {
+  report?: Report;
+  isAdmin: boolean;
+  busy: boolean;
+  load: () => Promise<void>;
+};
+function metrics(value: ReportTotals, isAdmin: boolean) {
+  return (
+    <>
+      <td>{value.total_cases}</td>
+      <td>{value.active_cases}</td>
+      <td>{value.concluded_cases}</td>
+      {isAdmin && (
+        <>
+          <td>{money(value.fee)}</td>
+          <td>{money(value.paid)}</td>
+          <td>{money(value.balance)}</td>
+        </>
+      )}
+    </>
   );
+}
+export default function Reports({ report, isAdmin, busy, load }: Props) {
   return (
     <>
       <div className="page-head">
         <div>
-          <p className="eyebrow">Información acumulada</p>
-          <h1>Consola de reportes</h1>
-          <p>Consulta las fuentes y abre el caso desde cada fila.</p>
+          <p className="eyebrow">Métricas del estudio</p>
+          <h1>Reportes</h1>
+          <p>Casos y resultados agrupados por Rama del Derecho.</p>
         </div>
+        <button
+          className="secondary"
+          disabled={busy}
+          onClick={() => void load()}
+        >
+          <RefreshCw size={15} />
+          Actualizar
+        </button>
       </div>
-      <div className="tabs">
-        {[
-          ["operativo", "Operativos"],
-          ...(actor.role === "admin"
-            ? [
-                ["economico", "Gerencial por área"],
-                ["cuenta", "Estado de cuenta y cartera"],
-                ["cobros", "Cobros por periodo"],
-              ]
-            : []),
-        ].map(([k, l]) => (
-          <button
-            key={k}
-            className={tab === k ? "active" : ""}
-            onClick={() => setTab(k)}
-          >
-            {l}
-          </button>
-        ))}
-      </div>
-      <ReportFilters
-        filters={filters}
-        setFilters={setFilters}
-        clients={clients}
-        cases={cases}
-        services={services}
-        tab={tab}
-        users={users}
-        busy={busy}
-        load={load}
-        error={error}
-      />
-      {tab === "operativo" && operational && (
-        <OperationalReport
-          operational={operational}
-          setDetailFilter={setDetailFilter}
-          detailFilter={detailFilter}
-          caseRows={caseRows}
-          openCase={openCase}
-          userName={userName}
-        />
-      )}
-      {(tab === "economico" || tab === "cuenta") && economic && (
-        <EconomicReport economic={economic} tab={tab} openCase={openCase} />
-      )}
-      {tab === "cobros" && collections && (
-        <CollectionsReport collections={collections} openCase={openCase} />
-      )}
+      <Card>
+        {report ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rama del Derecho</th>
+                  <th>Total casos</th>
+                  <th>Activos</th>
+                  <th>Concluidos</th>
+                  {isAdmin && (
+                    <>
+                      <th>Total facturado</th>
+                      <th>Efectivo cobrado</th>
+                      <th>Saldo pendiente</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {report.rows.map((row) => (
+                  <tr key={row.area}>
+                    <td>{row.area}</td>
+                    {metrics(row, isAdmin)}
+                  </tr>
+                ))}
+                <tr className="totals-row">
+                  <td>Total</td>
+                  {metrics(report.totals, isAdmin)}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Empty
+            text={
+              busy ? "Cargando reportes…" : "No hay información para mostrar."
+            }
+          />
+        )}
+        {isAdmin && (
+          <p className="muted text-sm mt-5 mb-0">
+            Saldo pendiente = honorarios pactados − abonos registrados.
+          </p>
+        )}
+      </Card>
     </>
   );
 }

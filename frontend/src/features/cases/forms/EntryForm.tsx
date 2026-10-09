@@ -1,51 +1,71 @@
-import { Field, Form } from "../../../components/ui/index";
+import { Field, Form } from "../../../components/ui";
 import { casesService } from "../../../services/cases";
+import type { Entry, User } from "../../../types";
 import { str } from "../../../utils/form";
-import { localDate } from "../../../utils/format";
-import type { CaseWorkspaceState } from "../hooks/useCaseWorkspace";
-
-type Props = Pick<CaseWorkspaceState, "editEntry" | "caseId" | "done">;
-export default function EntryForm({ editEntry, caseId, done }: Props) {
+import { dateTimeLabels, localDate } from "../../../utils/format";
+type Props = {
+  caseId: number;
+  actor: User;
+  item?: Entry;
+  done: () => Promise<void>;
+};
+export default function EntryForm({ caseId, actor, item, done }: Props) {
+  const registered = item && dateTimeLabels(item.created_at);
   return (
     <Form
-      submit={async (f) => {
-        await casesService.saveEntry(caseId, editEntry?.id, {
-          action_date: str(f, "action_date"),
-          description: str(f, "description"),
-          is_payment_event: editEntry
-            ? editEntry.is_payment_event
-            : f.has("is_payment_event"),
-        });
+      label={item ? "Guardar cambios" : "Registrar actuación"}
+      submit={async (form) => {
+        const data = {
+          action_date: str(form, "action_date"),
+          description: str(form, "description"),
+          alert_date: str(form, "alert_date") || null,
+        };
+        if (item) await casesService.updateEntry(item.id, data);
+        else await casesService.addEntry(caseId, data);
         await done();
       }}
     >
-      <Field label="Fecha real de actuación">
+      <Field label="Fecha de actuación">
         <input
-          type="date"
           name="action_date"
+          type="date"
           required
-          defaultValue={editEntry?.action_date || localDate()}
+          defaultValue={item?.action_date || localDate()}
+        />
+      </Field>
+      <Field label="Fecha de alerta legal (opcional)">
+        <input
+          name="alert_date"
+          type="date"
+          defaultValue={item?.alert_date || ""}
         />
       </Field>
       <div className="full">
-        <Field label="Descripción breve">
+        <Field label="Breve descripción del acto">
           <textarea
             name="description"
             required
-            defaultValue={editEntry?.description}
+            maxLength={10000}
+            placeholder="Describe la actuación realizada…"
+            defaultValue={item?.description}
           />
         </Field>
       </div>
-      {!editEntry && (
-        <label className="text-sm">
-          <input type="checkbox" name="is_payment_event" /> Acto que podría
-          activar una cuota
-        </label>
+      {item && registered ? (
+        <p className="full notice">
+          Responsable: {item.responsible_name}.
+          <br />
+          Registro original: {registered.date} · {registered.time}.
+        </p>
+      ) : (
+        <p className="full notice">
+          Responsable: {actor.name}. La fecha y hora de registro se guardan
+          automáticamente.
+        </p>
       )}
-      <p className="full muted text-xs">
-        El usuario y la fecha de registro se guardan automáticamente y no se
-        pueden editar.
-      </p>
+      {item?.attended && (
+        <p className="full muted text-sm">Esta obligación ya está atendida.</p>
+      )}
     </Form>
   );
 }

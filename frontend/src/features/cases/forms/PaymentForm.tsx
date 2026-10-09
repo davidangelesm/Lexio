@@ -1,111 +1,99 @@
-import { Field, Form } from "../../../components/ui/index";
+import { useState } from "react";
+import { Field, Form } from "../../../components/ui";
 import { financeService } from "../../../services/finance";
+import type { Case } from "../../../types";
 import { str } from "../../../utils/form";
-import { dateLabel, localDate, money } from "../../../utils/format";
-import type { CaseWorkspaceState } from "../hooks/useCaseWorkspace";
-
-type Props = Pick<
-  CaseWorkspaceState,
-  "allocations" | "modal" | "paymentId" | "done" | "setAllocations"
-> & { service: NonNullable<CaseWorkspaceState["service"]> };
-export default function PaymentForm({
-  allocations,
-  modal,
-  paymentId,
-  service,
-  done,
-  setAllocations,
-}: Props) {
+import { localDate, money } from "../../../utils/format";
+import { automaticAllocations } from "../models/paymentAllocation";
+type Props = { item: Case; done: () => Promise<void> };
+export default function PaymentForm({ item, done }: Props) {
+  const [amount, setAmount] = useState("");
+  const [firstQuota, setFirstQuota] = useState("");
+  const quotas = (item.installments || []).filter(
+    (quota) => Number(quota.balance) > 0,
+  );
+  const ordered = firstQuota
+    ? [
+        ...quotas.filter((quota) => quota.id === Number(firstQuota)),
+        ...quotas.filter((quota) => quota.id !== Number(firstQuota)),
+      ].map((quota, index) => ({ ...quota, number: index + 1 }))
+    : quotas;
+  const applications = automaticAllocations(amount, ordered);
   return (
     <Form
-      submit={async (f) => {
-        const applications = Object.entries(allocations)
-          .filter(([, v]) => Number(v) > 0)
-          .map(([k, v]) => ({ installment_id: Number(k), amount: v }));
-        if (modal === "credito")
-          await financeService.applyCredit(paymentId, {
-            applications,
-          });
-        else
-          await financeService.recordPayment(service.id, {
-            payment_date: str(f, "payment_date"),
-            amount: str(f, "amount"),
-            method: str(f, "method"),
-            receipt: str(f, "receipt"),
-            observation: str(f, "observation"),
-            applications,
-          });
+      label="Registrar abono"
+      submit={async (form) => {
+        await financeService.recordPayment(item.id, {
+          payment_date: str(form, "payment_date"),
+          amount,
+          method: str(form, "method"),
+          ...(firstQuota ? { installment_id: Number(firstQuota) } : {}),
+        });
         await done();
       }}
     >
-      {modal === "abono" && (
-        <>
-          <Field label="Fecha de abono">
-            <input
-              type="date"
-              name="payment_date"
-              required
-              max={localDate()}
-              defaultValue={localDate()}
-            />
-          </Field>
-          <Field label="Importe recibido S/">
-            <input
-              type="number"
-              name="amount"
-              required
-              min="0.01"
-              step="0.01"
-            />
-          </Field>
-          <Field label="Medio de pago">
-            <input
-              name="method"
-              required
-              placeholder="Transferencia, efectivo, Yape…"
-            />
-          </Field>
-          <Field label="Comprobante (referencia opcional)">
-            <input name="receipt" />
-          </Field>
-          <div className="full">
-            <Field label="Observación">
-              <textarea name="observation" />
-            </Field>
-          </div>
-        </>
-      )}
+      <Field label="Fecha de abono">
+        <input
+          name="payment_date"
+          type="date"
+          defaultValue={localDate()}
+          required
+        />
+      </Field>
+      <Field label="Importe recibido S/">
+        <input
+          name="amount"
+          type="number"
+          min="0.01"
+          max={item.balance || undefined}
+          step="0.01"
+          required
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+      </Field>
       <div className="full">
-        <p className="notice">
-          Distribuye el abono entre cuotas. La lista propone primero la cuota
-          exigible más antigua. Lo recibido sin aplicar queda como crédito
-          separado.
-        </p>
-        {service.installments
-          ?.filter((x) => Number(x.balance) > 0)
-          .map((x) => (
-            <div className="flex gap-4 items-center py-2" key={x.id}>
-              <span className="text-sm flex-1">
-                Cuota {x.number} · {money(x.balance)} · {dateLabel(x.due_date)}
-              </span>
-              <input
-                className="max-w-36"
-                type="number"
-                step="0.01"
-                min="0"
-                max={x.balance}
-                aria-label={`Aplicar a cuota ${x.number}`}
-                value={allocations[x.id] || ""}
-                onChange={(e) =>
-                  setAllocations({
-                    ...allocations,
-                    [x.id]: e.target.value,
-                  })
-                }
-              />
-            </div>
-          ))}
+        <Field label="Medio de pago (opcional)">
+          <input
+            name="method"
+            maxLength={80}
+            placeholder="Efectivo, transferencia, Yape…"
+          />
+        </Field>
       </div>
+      <div className="full">
+        <Field label="Aplicar primero a">
+          <select
+            value={firstQuota}
+            onChange={(e) => setFirstQuota(e.target.value)}
+          >
+            <option value="">Automático · primera cuota pendiente</option>
+            {quotas.map((quota) => (
+              <option value={quota.id} key={quota.id}>
+                Cuota {quota.number} · saldo {money(quota.balance)}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <p className="full notice">
+        El abono cubre primero la cuota pendiente elegida. El excedente pasa a
+        las siguientes cuotas en orden.
+      </p>
+      {amount && (
+        <div className="full payment-preview">
+          <strong>Así se aplicará el abono</strong>
+          {quotas
+            .filter((quota) => applications[quota.id])
+            .map((quota) => (
+              <p key={quota.id}>
+                Cuota {quota.number}
+                <span>{money(applications[quota.id])}</span>
+              </p>
+            ))}
+          <p className="muted">Saldo total pendiente: {money(item.balance)}</p>
+        </div>
+      )}
     </Form>
   );
 }

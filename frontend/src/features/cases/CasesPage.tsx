@@ -1,130 +1,165 @@
-import { Plus } from "lucide-react";
-import { Badge, Card, Empty, Field } from "../../components/ui/index";
-import type { LexioState } from "../../hooks/useLexio";
-
-type Props = Pick<
-  LexioState,
-  | "isAdmin"
-  | "setPage"
-  | "load"
-  | "area"
-  | "setArea"
-  | "status"
-  | "setStatus"
-  | "clientFilter"
-  | "setClientFilter"
-  | "busy"
-  | "cases"
-  | "openCase"
-  | "userName"
-> & { actor: NonNullable<LexioState["actor"]> };
+import { Plus, Search } from "lucide-react";
+import { Badge, Card, Empty, Field } from "../../components/ui";
+import type { Case, Client, User } from "../../types";
+import AreaSelect from "./components/AreaSelect";
+type Props = {
+  actor?: User;
+  cases: Case[];
+  clients: Client[];
+  busy: boolean;
+  search: string;
+  setSearch: (value: string) => void;
+  area: string;
+  setArea: (value: string) => void;
+  status: string;
+  setStatus: (value: string) => void;
+  clientFilter: string;
+  setClientFilter: (value: string) => void;
+  load: () => Promise<void>;
+  clearFilters: () => void;
+  openCase: (id: number) => Promise<void>;
+  create: () => void;
+  isAdmin: boolean;
+};
 export default function CasesPage({
-  isAdmin,
   actor,
-  setPage,
-  load,
+  cases,
+  clients,
+  busy,
+  search,
+  setSearch,
   area,
   setArea,
   status,
   setStatus,
   clientFilter,
   setClientFilter,
-  busy,
-  cases,
+  load,
+  clearFilters,
   openCase,
-  userName,
+  create,
+  isAdmin,
 }: Props) {
   return (
     <>
       <div className="page-head">
         <div>
-          <p className="eyebrow">Cartera jurídica</p>
+          <p className="eyebrow">Procesos del estudio</p>
           <h1>Casos</h1>
-          <p>Selecciona un caso para consultar su historia y módulos.</p>
+          <p>Consulta los procesos de cada cliente y su seguimiento.</p>
         </div>
-        {(isAdmin || actor.can_create_cases) && (
-          <button className="primary" onClick={() => setPage("clientes")}>
-            <Plus size={15} />
-            Seleccionar cliente
+        {(isAdmin || actor?.can_create_cases) && (
+          <button className="primary" onClick={create}>
+            <Plus size={16} />
+            Nuevo caso
           </button>
         )}
       </div>
       <Card>
         <form
           className="filters"
-          onSubmit={(e) => {
-            e.preventDefault();
+          onSubmit={(event) => {
+            event.preventDefault();
             void load();
           }}
         >
-          <Field label="Rama / área">
-            <input value={area} onChange={(e) => setArea(e.target.value)} />
+          <Field label="Buscar cliente o proceso">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Nombre, código o proceso"
+            />
+          </Field>
+          <Field label="Cliente">
+            <select
+              value={clientFilter}
+              onChange={(event) => setClientFilter(event.target.value)}
+            >
+              <option value="">Todos los clientes</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Rama del Derecho">
+            <AreaSelect
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+            />
           </Field>
           <Field label="Estado">
             <select value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">Todos</option>
-              {["activo", "suspendido", "concluido"].map((x) => (
-                <option key={x}>{x}</option>
-              ))}
+              <option value="activo">Activo</option>
+              <option value="concluido">Concluido</option>
             </select>
           </Field>
-          <Field label="ID cliente">
-            <input
-              type="number"
-              value={clientFilter}
-              onChange={(e) => setClientFilter(e.target.value)}
-            />
-          </Field>
-          <button className="primary" disabled={busy}>
-            Filtrar
-          </button>
+          <div className="actions">
+            <button className="primary" disabled={busy}>
+              <Search size={15} />
+              Buscar
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={clearFilters}
+              disabled={busy}
+            >
+              Limpiar filtros
+            </button>
+          </div>
         </form>
-        {!cases.length ? (
-          <Empty
-            text={
-              busy
-                ? "Consultando…"
-                : "No hay casos autorizados con estos filtros."
-            }
-          />
-        ) : (
+        {cases.length ? (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Caso / cliente</th>
-                  <th>Rama y materia</th>
-                  <th>Etapa</th>
-                  <th>Responsable</th>
+                  <th>Cliente</th>
+                  <th>Tipo de proceso</th>
+                  <th>Rama del Derecho</th>
                   <th>Estado</th>
+                  <th>Responsable</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {cases.map((x) => (
-                  <tr key={x.id}>
+                {cases.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <strong>{item.client.name}</strong>
+                      <small>{item.client.code}</small>
+                    </td>
+                    <td>
+                      {item.process_type}
+                      <small>{item.initial_stage}</small>
+                    </td>
+                    <td>{item.area}</td>
+                    <td>
+                      <Badge>
+                        {item.status === "activo" ? "Activo" : "Concluido"}
+                      </Badge>
+                    </td>
+                    <td>{item.responsible_name}</td>
                     <td>
                       <button
-                        className="link-button"
-                        onClick={() => void openCase(x.id)}
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => void openCase(item.id)}
                       >
-                        {x.code} · {x.client.name}
+                        Ver caso
                       </button>
-                      <small>{x.client.code}</small>
-                    </td>
-                    <td>
-                      {x.area}
-                      <small>{x.subject}</small>
-                    </td>
-                    <td>{x.current_stage}</td>
-                    <td>{userName(x.responsible_id)}</td>
-                    <td>
-                      <Badge>{x.status}</Badge>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        ) : (
+          <Empty
+            text={busy ? "Cargando casos…" : "No hay casos para estos filtros."}
+          />
         )}
       </Card>
     </>

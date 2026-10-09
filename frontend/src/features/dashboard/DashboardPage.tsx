@@ -1,40 +1,27 @@
-import {
-  ArrowUpRight,
-  Bell,
-  CalendarDays,
-  ChartNoAxesCombined,
-  FolderOpen,
-  RefreshCw,
-} from "lucide-react";
-import type { ReactNode } from "react";
-import { Card, Empty } from "../../components/ui/index";
-import type { LexioState } from "../../hooks/useLexio";
-import type { Alert } from "../../types/index";
-import { money } from "../../utils/format";
-
-type Props = Pick<
-  LexioState,
-  | "busy"
-  | "load"
-  | "dashboard"
-  | "isAdmin"
-  | "setPage"
-  | "userName"
-  | "openCase"
-> & {
-  actor: NonNullable<LexioState["actor"]>;
-  alertTable: (data: Alert[]) => ReactNode;
+import { Bell, FolderOpen, RefreshCw, Wallet } from "lucide-react";
+import { Badge, Card, Empty } from "../../components/ui";
+import type { Alert, Dashboard, User } from "../../types";
+import { dateLabel, localDate, money } from "../../utils/format";
+import AlertTable from "../alerts/components/AlertTable";
+type Props = {
+  actor: User;
+  dashboard?: Dashboard;
+  alerts: Alert[];
+  isAdmin: boolean;
+  busy: boolean;
+  load: () => Promise<void>;
+  openCase: (id: number) => Promise<void>;
+  setPage: (page: string) => void;
 };
 export default function DashboardPage({
   actor,
+  dashboard,
+  alerts,
+  isAdmin,
   busy,
   load,
-  dashboard,
-  isAdmin,
-  setPage,
-  alertTable,
-  userName,
   openCase,
+  setPage,
 }: Props) {
   return (
     <>
@@ -52,122 +39,132 @@ export default function DashboardPage({
           disabled={busy}
           onClick={() => void load()}
         >
-          <RefreshCw size={14} className={busy ? "animate-spin" : ""} />
-          Actualizar
+          <RefreshCw size={15} /> Actualizar
         </button>
       </div>
       {dashboard ? (
         <>
-          <div className="stats">
-            <Card className="stat">
-              <FolderOpen size={20} />
+          <div className="dashboard-stats">
+            <Card className="dashboard-stat">
+              <FolderOpen size={21} />
               <p>Casos activos</p>
-              <strong>{dashboard.active_cases}</strong>
-              <small>Cartera autorizada</small>
+              <strong>{dashboard.counts.active_cases}</strong>
+              <small>{dashboard.counts.total_cases} casos en total</small>
             </Card>
-            <Card className="stat">
-              <Bell size={20} />
-              <p>Avisos procesales</p>
-              <strong>{dashboard.procedural_alerts}</strong>
-              <small>Próximos, hoy y vencidos</small>
+            <Card className="dashboard-stat">
+              <Bell size={21} />
+              <p>Alertas por revisar</p>
+              <strong>{alerts.length}</strong>
+              <small>
+                {dashboard.counts.pending_legal_alerts}{" "}
+                {dashboard.counts.pending_legal_alerts === 1
+                  ? "obligación legal pendiente"
+                  : "obligaciones legales pendientes"}
+              </small>
             </Card>
-            <Card className="stat">
-              <CalendarDays size={20} />
-              <p>Programado para hoy</p>
+            <Card className="dashboard-stat">
+              {isAdmin ? <Wallet size={21} /> : <FolderOpen size={21} />}
+              <p>{isAdmin ? "Saldo por cobrar" : "Casos concluidos"}</p>
               <strong>
-                {dashboard.today_tasks.length +
-                  (dashboard.today_events?.length || 0)}
+                {isAdmin
+                  ? money(dashboard.finance?.balance)
+                  : dashboard.counts.concluded_cases}
               </strong>
-              <small>Tareas pendientes</small>
+              <small>
+                {isAdmin
+                  ? "Honorarios pendientes de pago"
+                  : "De los casos a los que tienes acceso"}
+              </small>
             </Card>
-            {isAdmin && (
-              <Card className="stat">
-                <ChartNoAxesCombined size={20} />
-                <p>Avisos de pago</p>
-                <strong>{dashboard.payment_alerts || 0}</strong>
-                <small>
-                  {money(dashboard.payment_balance)} · incluye provisionales
-                </small>
-              </Card>
-            )}
           </div>
           <Card>
             <div className="card-head">
-              <h2>Prioridades y vencimientos</h2>
-              <button
-                className="link-button flex gap-2 items-center"
-                onClick={() => setPage("alertas")}
-              >
-                Ver centro de alertas
-                <ArrowUpRight size={15} />
+              <div>
+                <h2>Alertas y vencimientos</h2>
+                <p className="muted card-description">
+                  Primero los vencimientos más próximos y urgentes.
+                </p>
+              </div>
+              <button className="secondary" onClick={() => setPage("alertas")}>
+                Ver todas las alertas
               </button>
             </div>
-            {alertTable(dashboard.alerts)}
-          </Card>
-          <Card>
-            <h2>Actuaciones programadas para hoy</h2>
-            {!dashboard.today_tasks.length &&
-            !dashboard.today_events?.length ? (
-              <Empty text="No tienes tareas ni eventos programados para hoy." />
-            ) : (
-              dashboard.today_tasks.map((x) => (
-                <div key={x.id} className="flex justify-between text-sm py-3">
-                  <span>
-                    {x.description} · {userName(x.responsible_id)}
-                  </span>
-                  <button
-                    className="link-button"
-                    onClick={() => void openCase(x.case_id)}
-                  >
-                    Abrir caso
-                  </button>
-                </div>
-              ))
-            )}
-            {dashboard.today_events?.map((x) => (
-              <div
-                key={`event-${x.id}`}
-                className="flex justify-between text-sm py-3"
-              >
-                <span>{x.description} · evento programado</span>
-                <button
-                  className="link-button"
-                  onClick={() => void openCase(x.case_id)}
-                >
-                  Abrir caso
-                </button>
-              </div>
-            ))}
+            <AlertTable
+              data={alerts.slice(0, 5)}
+              isAdmin={isAdmin}
+              busy={busy}
+              load={load}
+              openCase={openCase}
+            />
           </Card>
           {isAdmin && (
             <Card>
-              <h2>Eventos de cobro por revisar</h2>
-              {!dashboard.event_reviews?.length ? (
-                <Empty text="Las cuotas vinculadas a eventos no requieren revisión." />
+              <div className="card-head">
+                <div>
+                  <h2>Cobros próximos</h2>
+                  <p className="muted card-description">
+                    Cuotas pendientes de los próximos 30 días y cobros vencidos.
+                  </p>
+                </div>
+              </div>
+              {dashboard.upcoming_payments?.length ? (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Cliente y caso</th>
+                        <th>Vencimiento</th>
+                        <th>Saldo de la cuota</th>
+                        <th>Estado</th>
+                        <th>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dashboard.upcoming_payments.map((item) => (
+                        <tr key={item.id}>
+                          <td>
+                            <strong>{item.client_name}</strong>
+                            <small>
+                              {item.client_code} · {item.process_type}
+                            </small>
+                          </td>
+                          <td>
+                            {dateLabel(item.due_date)}
+                            <small>Cuota {item.number}</small>
+                          </td>
+                          <td>{money(item.balance)}</td>
+                          <td>
+                            <Badge>
+                              {item.due_date < localDate()
+                                ? "Vencido"
+                                : item.due_date === localDate()
+                                  ? "Vence hoy"
+                                  : "Pendiente"}
+                            </Badge>
+                          </td>
+                          <td>
+                            <button
+                              className="secondary"
+                              disabled={busy}
+                              onClick={() => void openCase(item.case_id)}
+                            >
+                              Ver caso
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
-                dashboard.event_reviews.map((x) => (
-                  <div
-                    key={x.installment_id}
-                    className="flex justify-between py-3 text-sm"
-                  >
-                    <span>{x.description}</span>
-                    <button
-                      className="link-button"
-                      onClick={() => void openCase(x.case_id)}
-                    >
-                      Revisar en finanzas
-                    </button>
-                  </div>
-                ))
+                <Empty text="No hay cobros pendientes para los próximos 30 días." />
               )}
             </Card>
           )}
         </>
       ) : (
         <Empty
-          text={
-            busy ? "Cargando el panel…" : "Conecta la API y actualiza el panel."
-          }
+          text={busy ? "Cargando el panel…" : "Actualiza para cargar el panel."}
         />
       )}
     </>

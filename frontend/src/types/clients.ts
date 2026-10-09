@@ -8,8 +8,3 @@ export interface Client {
   email: string;
   address: string;
 }
-export interface FileLink {
-  id: number;
-  title: string;
-  classification: string;
-}

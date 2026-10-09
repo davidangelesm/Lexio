@@ -15,6 +15,31 @@ export const dateLabel = (value: string | null | undefined): string =>
         dateStyle: "medium",
         timeZone: "America/Lima",
       }).format(
-        new Date(value.length === 10 ? `${value}T12:00:00-05:00` : `${value}Z`),
+        new Date(
+          value.length === 10
+            ? `${value}T12:00:00-05:00`
+            : /(?:Z|[+-]\d{2}:\d{2})$/i.test(value)
+              ? value
+              : `${value}Z`,
+        ),
       )
-    : "Pendiente de evento";
+    : "Sin fecha";
+
+export function dateTimeLabels(value: string): { date: string; time: string } {
+  // Backend timestamps without an offset are stored as UTC.
+  const timestamp = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
+  const instant = new Date(timestamp);
+  if (Number.isNaN(instant.getTime())) return { date: "Sin fecha", time: "" };
+  return {
+    date: new Intl.DateTimeFormat("es-PE", {
+      timeZone: "America/Lima",
+      dateStyle: "long",
+    }).format(instant),
+    time: new Intl.DateTimeFormat("es-PE", {
+      timeZone: "America/Lima",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(instant),
+  };
+}

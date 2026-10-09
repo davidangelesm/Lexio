@@ -10,14 +10,13 @@ export interface User {
 export interface Access {
   id: number;
   user_id: number;
+  user_name: string;
   level: string;
 }
 export interface Audit {
   id: number;
   created_at: string;
   user_id: number;
-  resource: string;
-  resource_id: number;
+  user_name: string;
   action: string;
-  changes: string;
 }

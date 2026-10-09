@@ -1,108 +1,40 @@
-import type {
-  Access,
-  Case,
-  Entry,
-  Event,
-  FileLink,
-  Service,
-  Task,
-} from "../types";
-import type {
-  AccessInput,
-  CaseInput,
-  CaseUpdateInput,
-  EntryInput,
-  EventInput,
-  FileInput,
-  ServiceInput,
-  TaskInput,
-} from "../types/requests";
-import { query } from "../utils/query";
+import type { Access, Case, Entry } from "../types";
+import type { AccessInput, CaseInput, EntryInput } from "../types/requests";
 import { api } from "./http";
-
+import { query } from "../utils/query";
 export const casesService = {
   list(filters: Record<string, string> = {}): Promise<Case[]> {
-    return api<Case[]>(`/cases?${query(filters)}`, "GET");
+    const params = query(filters);
+    return api<Case[]>(`/cases${params ? `?${params}` : ""}`);
   },
-  get(id: number | string): Promise<Case> {
-    return api<Case>(`/cases/${id}`, "GET");
+  get(id: number): Promise<Case> {
+    return api<Case>(`/cases/${id}`);
   },
   create(data: CaseInput): Promise<Case> {
-    return api<Case>(`/cases`, "POST", data);
+    return api<Case>("/cases", "POST", data);
   },
-  listEntries(caseId: number): Promise<Entry[]> {
-    return api<Entry[]>(`/cases/${caseId}/entries`, "GET");
+  update(id: number, data: Partial<CaseInput>): Promise<Case> {
+    return api<Case>(`/cases/${id}`, "PUT", data);
   },
-  listTasks(caseId: number): Promise<Task[]> {
-    return api<Task[]>(`/cases/${caseId}/tasks`, "GET");
+  entries(id?: number): Promise<Entry[]> {
+    return api<Entry[]>(id ? `/cases/${id}/entries` : "/entries");
   },
-  listEvents(caseId: number): Promise<Event[]> {
-    return api<Event[]>(`/cases/${caseId}/events`, "GET");
+  addEntry(id: number, data: EntryInput): Promise<Entry> {
+    return api<Entry>(`/cases/${id}/entries`, "POST", data);
   },
-  listFiles(caseId: number): Promise<FileLink[]> {
-    return api<FileLink[]>(`/cases/${caseId}/files`, "GET");
+  updateEntry(id: number, data: EntryInput): Promise<Entry> {
+    return api<Entry>(`/entries/${id}`, "PUT", data);
   },
-  listServices(caseId: number | string): Promise<Service[]> {
-    return api<Service[]>(`/cases/${caseId}/services`, "GET");
+  attendEntry(id: number): Promise<unknown> {
+    return api(`/entries/${id}/attend`, "POST");
   },
-  listAccess(caseId: number): Promise<Access[]> {
-    return api<Access[]>(`/cases/${caseId}/access`, "GET");
+  access(id: number): Promise<Access[]> {
+    return api<Access[]>(`/cases/${id}/access`);
   },
-  reviewEvent(caseId: number, relatedId: number): Promise<unknown> {
-    return api<unknown>(`/cases/${caseId}/events/${relatedId}/review`, "POST");
+  saveAccess(id: number, data: AccessInput): Promise<unknown> {
+    return api(`/cases/${id}/access`, "POST", data);
   },
-  revokeAccess(caseId: number, relatedId: number): Promise<unknown> {
-    return api<unknown>(`/cases/${caseId}/access/${relatedId}`, "DELETE");
-  },
-  update(caseId: number, data: CaseUpdateInput): Promise<unknown> {
-    return api<unknown>(`/cases/${caseId}`, "PUT", data);
-  },
-  saveEntry(
-    caseId: number,
-    id: number | undefined,
-    data: EntryInput,
-  ): Promise<unknown> {
-    return api<unknown>(
-      id === undefined
-        ? `/cases/${caseId}/entries`
-        : `/cases/${caseId}/entries/${id}`,
-      id === undefined ? "POST" : "PUT",
-      data,
-    );
-  },
-  saveTask(
-    caseId: number,
-    id: number | undefined,
-    data: TaskInput,
-  ): Promise<unknown> {
-    return api<unknown>(
-      id === undefined
-        ? `/cases/${caseId}/tasks`
-        : `/cases/${caseId}/tasks/${id}`,
-      id === undefined ? "POST" : "PUT",
-      data,
-    );
-  },
-  saveEvent(
-    caseId: number,
-    id: number | undefined,
-    data: EventInput,
-  ): Promise<unknown> {
-    return api<unknown>(
-      id === undefined
-        ? `/cases/${caseId}/events`
-        : `/cases/${caseId}/events/${id}`,
-      id === undefined ? "POST" : "PUT",
-      data,
-    );
-  },
-  createFile(caseId: number, data: FileInput): Promise<unknown> {
-    return api<unknown>(`/cases/${caseId}/files`, "POST", data);
-  },
-  grantAccess(caseId: number, data: AccessInput): Promise<unknown> {
-    return api<unknown>(`/cases/${caseId}/access`, "POST", data);
-  },
-  createService(caseId: number, data: ServiceInput): Promise<unknown> {
-    return api<unknown>(`/cases/${caseId}/services`, "POST", data);
+  removeAccess(id: number, userId: number): Promise<unknown> {
+    return api(`/cases/${id}/access/${userId}`, "DELETE");
   },
 };

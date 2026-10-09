@@ -6,17 +6,33 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { api, setToken } from "../src/services/http.ts";
 import { authService } from "../src/services/auth.ts";
 import { alertsService } from "../src/services/alerts.ts";
-import { clientsService } from "../src/services/clients.ts";
 import { casesService } from "../src/services/cases.ts";
 import { financeService } from "../src/services/finance.ts";
 import { reportsService } from "../src/services/reports.ts";
-import { openPrivateFile } from "../src/services/files.ts";
+import { dashboardService } from "../src/services/dashboard.ts";
 import App from "../src/app/App.tsx";
 import AppShell from "../src/components/layout/AppShell.tsx";
+import CaseWorkspace from "../src/features/cases/CaseWorkspace.tsx";
+import CasesPage from "../src/features/cases/CasesPage.tsx";
+import CaseForm from "../src/features/cases/forms/CaseForm.tsx";
+import ClientsPage from "../src/features/clients/ClientsPage.tsx";
+import ClientForm from "../src/features/clients/forms/ClientForm.tsx";
+import DashboardPage from "../src/features/dashboard/DashboardPage.tsx";
+import EntryForm from "../src/features/cases/forms/EntryForm.tsx";
+import PaymentForm from "../src/features/cases/forms/PaymentForm.tsx";
+import EntryTable from "../src/features/cases/components/EntryTable.tsx";
+import AreaSelect from "../src/features/cases/components/AreaSelect.tsx";
 import AlertTable from "../src/features/alerts/components/AlertTable.tsx";
-import CaseServices from "../src/features/cases/components/CaseServices.tsx";
-import ResponsibleSelect from "../src/features/cases/components/ResponsibleSelect.tsx";
+import Reports from "../src/features/reports/Reports.tsx";
+import AdministrationPage from "../src/features/admin/AdministrationPage.tsx";
 import UserForm from "../src/features/admin/forms/UserForm.tsx";
+import { dateTimeLabels, dateLabel } from "../src/utils/format.ts";
+import { automaticAllocations } from "../src/features/cases/models/paymentAllocation.ts";
+import { useLexio } from "../src/hooks/useLexio.ts";
+import {
+  LEGAL_AREAS,
+  legalArea,
+} from "../src/features/cases/models/legalAreas.ts";
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
@@ -26,6 +42,81 @@ afterEach(() => {
   setToken("");
 });
 const noop = () => {};
+const admin = {
+  id: 1,
+  name: "David",
+  username: "admin",
+  role: "admin",
+  active: true,
+};
+const staff = {
+  ...admin,
+  id: 2,
+  name: "Abogado",
+  role: "staff",
+  can_create_cases: true,
+};
+const client = {
+  id: 1,
+  code: "CL-000001",
+  name: "Ana Torres",
+  document_type: "DNI",
+  document_number: "12345678",
+  phone: "999555222",
+  email: "",
+  address: "Lima",
+};
+const item = {
+  id: 1,
+  code: "CAS-000001",
+  client_id: 1,
+  client,
+  area: "Civil",
+  process_type: "Cobro de deuda",
+  initial_stage: "Demanda",
+  status: "activo",
+  responsible_id: 2,
+  responsible_name: "Abogado",
+  created_at: "2026-10-08T15:00:00",
+  access_level: "edit",
+  fee: "1000.00",
+  paid: "400.00",
+  balance: "600.00",
+  cancelled: false,
+  installments: [
+    {
+      id: 1,
+      number: 1,
+      amount: "500.00",
+      paid: "400.00",
+      balance: "100.00",
+      due_date: "2026-10-09",
+      state: "pendiente",
+    },
+    {
+      id: 2,
+      number: 2,
+      amount: "500.00",
+      paid: "0.00",
+      balance: "500.00",
+      due_date: "2026-10-12",
+      state: "pendiente",
+    },
+  ],
+  payments: [
+    {
+      id: 1,
+      payment_date: "2026-10-08",
+      amount: "400.00",
+      method: "Efectivo",
+      registered_by: 1,
+      created_at: "2026-10-08T15:00:00",
+    },
+  ],
+};
+function render(component, props = {}) {
+  return renderToStaticMarkup(createElement(component, props));
+}
 function capture(response = {}) {
   const calls = [];
   globalThis.fetch = async (url, options) => {
@@ -34,38 +125,42 @@ function capture(response = {}) {
   };
   return calls;
 }
-const user = { id: 1, name: "David", role: "admin", active: true };
+function textOf(node) {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join("");
+  return node && typeof node === "object" ? textOf(node.props?.children) : "";
+}
+function findButtons(node, label) {
+  if (Array.isArray(node))
+    return node.flatMap((child) => findButtons(child, label));
+  if (!node || typeof node !== "object") return [];
+  if (node.type === "button" && textOf(node) === label) return [node];
+  return findButtons(node.props?.children, label);
+}
+function formProps(component, props) {
+  let form;
+  function CaptureForm() {
+    form = component(props);
+    return null;
+  }
+  render(CaptureForm);
+  return form.props;
+}
 
-test("HTTP conserva JWT en memoria, cuerpo JSON y timeout", async () => {
-  const calls = capture({ id: 7 });
-  setToken("test-token");
-  assert.deepEqual(await api("/clients", "POST", { name: "Cliente" }), {
-    id: 7,
-  });
-  assert.equal(calls[0].url, "https://lexio.test/clients");
-  assert.equal(calls[0].headers.Authorization, "Bearer test-token");
-  assert.deepEqual(JSON.parse(calls[0].body), { name: "Cliente" });
-  assert.ok(calls[0].signal instanceof AbortSignal);
-});
-test("login usa el endpoint y las credenciales originales", async () => {
-  const result = { access_token: "token", user };
-  const calls = capture(result);
-  assert.deepEqual(
-    await authService.login({
-      username: "david",
-      password: "fixture",
-    }),
-    result,
-  );
+test("login y JWT mantienen credenciales por usuario y token en memoria", async () => {
+  const calls = capture({ access_token: "token", user: admin });
+  await authService.login({ username: "admin", password: "fixture" });
   assert.equal(calls[0].url, "https://lexio.test/auth/login");
-  assert.equal(calls[0].method, "POST");
-  assert.equal(calls[0].headers.Authorization, undefined);
   assert.deepEqual(JSON.parse(calls[0].body), {
-    username: "david",
+    username: "admin",
     password: "fixture",
   });
+  setToken("token");
+  await api("/cases");
+  assert.equal(calls[1].headers.Authorization, "Bearer token");
+  assert.ok(calls[1].signal instanceof AbortSignal);
 });
-test("401 invalida el token y comunica expiración de sesión", async () => {
+test("401 elimina el token y comunica expiración", async () => {
   const events = [];
   globalThis.window = { dispatchEvent: (e) => events.push(e.type) };
   setToken("expired");
@@ -77,135 +172,29 @@ test("401 invalida el token y comunica expiración de sesión", async () => {
   await api("/cases");
   assert.equal(calls[0].headers.Authorization, undefined);
 });
-test("errores Pydantic mantienen campo y mensaje", async () => {
-  globalThis.fetch = async () =>
-    Response.json(
-      { detail: [{ loc: ["body", "username"], msg: "Usuario inválido" }] },
-      { status: 422 },
-    );
-  await assert.rejects(api("/auth/login"), /username: Usuario inválido/);
-});
-test("filtros omiten valores vacíos y codifican caracteres", async () => {
-  const calls = capture([]);
-  await clientsService.list({ q: "Ana & José", document_type: "" });
-  await casesService.list();
-  const url = new URL(calls[0].url);
-  assert.equal(url.searchParams.get("q"), "Ana & José");
-  assert.equal(url.searchParams.has("document_type"), false);
-  assert.equal(new URL(calls[1].url).pathname, "/cases");
-});
-test("crear y editar actuaciones, tareas y eventos mantienen el caso y método", async () => {
+test("una respuesta 401 de la sesión anterior conserva la sesión nueva", async () => {
+  const events = [];
+  let finish;
+  globalThis.window = { dispatchEvent: (e) => events.push(e.type) };
+  globalThis.fetch = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
+  setToken("old-session");
+  const pending = assert.rejects(api("/cases"), /Sesión anterior vencida/);
+  setToken("new-session");
+  finish(Response.json({ detail: "Sesión anterior vencida" }, { status: 401 }));
+  await pending;
+  assert.deepEqual(events, []);
   const calls = capture();
-  for (const [method, route, data] of [
-    [
-      "saveEntry",
-      "entries",
-      {
-        action_date: "2026-10-06",
-        description: "Actuación",
-        is_payment_event: false,
-      },
-    ],
-    [
-      "saveTask",
-      "tasks",
-      {
-        description: "Tarea",
-        responsible_id: 1,
-        due_date: "2026-10-07",
-        status: "pendiente",
-        entry_id: null,
-      },
-    ],
-    [
-      "saveEvent",
-      "events",
-      {
-        description: "Audiencia",
-        entry_id: null,
-        scheduled_date: null,
-        effective_date: null,
-        effective_kind: null,
-      },
-    ],
-  ]) {
-    await casesService[method](42, undefined, data);
-    await casesService[method](42, 9, data);
-    const [create, edit] = calls.splice(0);
-    assert.equal(create.url, `https://lexio.test/cases/42/${route}`);
-    assert.equal(create.method, "POST");
-    assert.equal(edit.url, `https://lexio.test/cases/42/${route}/9`);
-    assert.equal(edit.method, "PUT");
-    assert.deepEqual(JSON.parse(edit.body), data);
-  }
+  await api("/cases");
+  assert.equal(calls[0].headers.Authorization, "Bearer new-session");
 });
-test("pagos conservan importes decimales como texto y aplicaciones", async () => {
-  const calls = capture();
-  const applications = [{ installment_id: 8, amount: "125.30" }];
-  await financeService.recordPayment(4, {
-    payment_date: "2026-10-06",
-    amount: "200.00",
-    method: "Transferencia",
-    receipt: "",
-    observation: "",
-    applications,
-  });
-  await financeService.applyCredit(5, { applications });
-  await financeService.reversePayment(5, { reason: "Pago duplicado" });
-  assert.equal(calls[0].url, "https://lexio.test/services/4/payments");
-  assert.equal(JSON.parse(calls[0].body).amount, "200.00");
-  assert.deepEqual(JSON.parse(calls[0].body).applications, applications);
-  assert.equal(calls[1].url, "https://lexio.test/payments/5/apply");
-  assert.equal(calls[2].url, "https://lexio.test/payments/5/reverse");
-});
-test("confirmar, vincular y reprogramar cuotas mantienen sus endpoints", async () => {
-  const calls = capture();
-  await financeService.confirmInstallment(8);
-  await financeService.linkInstallmentEvent(8, { event_id: 9 });
-  await financeService.rescheduleInstallment(8, {
-    due_date: "2026-10-20",
-    reason: "Acuerdo con cliente",
-  });
-  assert.deepEqual(
-    calls.map((c) => [new URL(c.url).pathname, c.method]),
-    [
-      ["/installments/8/confirm", "POST"],
-      ["/installments/8/event", "PUT"],
-      ["/installments/8/reschedule", "PUT"],
-    ],
-  );
-});
-test("reportes mantienen cortes y filtros enviados a FastAPI", async () => {
-  const calls = capture();
-  await reportsService.economic({
-    cutoff: "2026-10-06",
-    client_id: "3",
-    case_id: "",
-    service_id: "",
-  });
-  const url = new URL(calls[0].url);
-  assert.equal(url.pathname, "/reports/economic");
-  assert.equal(url.searchParams.get("cutoff"), "2026-10-06");
-  assert.equal(url.searchParams.has("case_id"), false);
-});
-test("archivo privado obtiene autorización de la API antes de abrir el enlace", async () => {
-  const calls = capture({ url: "https://drive.google.com/file/fixture" });
-  const opened = [];
-  globalThis.window = { open: (...args) => opened.push(args) };
-  await openPrivateFile(6);
-  assert.equal(calls[0].url, "https://lexio.test/files/6/open");
-  assert.deepEqual(opened[0], [
-    "https://drive.google.com/file/fixture",
-    "_blank",
-    "noopener,noreferrer",
-  ]);
-});
-test("la aplicación inicia en login y monta el elemento existente", async () => {
-  const html = renderToStaticMarkup(createElement(App));
+test("la aplicación inicia en login y conserva el punto de montaje", async () => {
+  const html = render(App);
   assert.match(html, /Ingresa a tu estudio/);
-  assert.match(html, /name="password"/);
   assert.match(html, /name="username"/);
-  assert.doesNotMatch(html, /type="email"|name="email"/);
+  assert.doesNotMatch(html, /type="email"/);
   const entry = await readFile(
     new URL("../src/main.tsx", import.meta.url),
     "utf8",
@@ -214,198 +203,826 @@ test("la aplicación inicia en login y monta el elemento existente", async () =>
     new URL("../index.html", import.meta.url),
     "utf8",
   );
-  const id = entry.match(/getElementById\("([^"]+)"\)/)[1];
-  assert.ok(document.includes(`id="${id}"`));
-});
-
-test("administración crea y cambia el usuario de acceso", async () => {
-  const html = renderToStaticMarkup(createElement(UserForm, { done: noop }));
-  assert.match(html, /minLength="6"/i);
-  assert.match(html, /mínimo 6 caracteres/);
-  const calls = capture({});
-  const form = new FormData();
-  form.set("name", "Juan Pérez");
-  form.set("username", "juan.perez");
-  form.set("password", "password-test-123");
-  await UserForm({ done: noop }).props.submit(form);
-  assert.equal(calls[0].method, "POST");
-  assert.equal(JSON.parse(calls[0].body).username, "juan.perez");
-  assert.equal("email" in JSON.parse(calls[0].body), false);
-  form.set("username", "juan.nuevo");
-  form.set("password", "");
-  form.set("active", "on");
-  await UserForm({
-    editUser: { ...user, username: "juan.perez" },
-    done: noop,
-  }).props.submit(form);
-  assert.equal(calls[1].method, "PUT");
-  assert.equal(JSON.parse(calls[1].body).username, "juan.nuevo");
-  assert.equal(JSON.parse(calls[1].body).password, null);
-});
-test("navegación conserva administración solo para administrador", () => {
-  const props = {
-    actor: user,
-    page: "panel",
-    onNavigate: noop,
-    onLogout: noop,
-    children: "Contenido",
-  };
-  assert.match(
-    renderToStaticMarkup(createElement(AppShell, props)),
-    /title="Administración"/,
-  );
-  assert.doesNotMatch(
-    renderToStaticMarkup(
-      createElement(AppShell, { ...props, actor: { ...user, role: "staff" } }),
-    ),
-    /title="Administración"/,
+  assert.ok(
+    document.includes(`id="${entry.match(/getElementById\("([^"]+)"\)/)[1]}"`),
   );
 });
-test("tabla de alertas oculta saldos al equipo jurídico", () => {
-  const data = [
-    {
-      id: 1,
-      case_id: 42,
-      client: { name: "Cliente", code: "CL1" },
-      case_code: "CA1",
-      description: "Obligación",
-      kind: "pago",
-      target_date: "2026-10-07",
-      responsible_id: 1,
-      amount: "9876.54",
-      label: "Próximo",
-      read_at: null,
+test("al iniciar una sesión la página inicial es el panel", () => {
+  let initialPage;
+  function InitialPage() {
+    initialPage = useLexio().page;
+    return null;
+  }
+  render(InitialPage);
+  assert.equal(initialPage, "inicio");
+});
+test("panel inicial reúne resumen, alertas y cobros respetando el rol", async () => {
+  const dashboard = {
+    counts: {
+      total_cases: 4,
+      active_cases: 3,
+      concluded_cases: 1,
+      pending_legal_alerts: 2,
     },
-  ];
-  const props = {
-    data,
-    isAdmin: false,
-    busy: false,
-    openCase: noop,
-    userName: () => "David",
-    setError: noop,
-    load: noop,
-  };
-  const staff = renderToStaticMarkup(createElement(AlertTable, props));
-  assert.doesNotMatch(staff, /<th>Saldo<\/th>/);
-  assert.doesNotMatch(staff, /9[,.]876/);
-  assert.match(
-    renderToStaticMarkup(
-      createElement(AlertTable, { ...props, isAdmin: true }),
-    ),
-    /<th>Saldo<\/th>/,
-  );
-});
-
-test("alertas urgentes muestran atender según permiso y conservan el acceso al caso", () => {
-  const item = {
-    id: 7,
-    case_id: 42,
-    client: { name: "Cliente", code: "CL1" },
-    case_code: "CAS1",
-    description: "Presentar escrito",
-    kind: "procesal",
-    target_date: "2026-10-01",
-    responsible_id: 1,
-    amount: null,
-    label: "urgente · vencido",
-    urgent: true,
-    can_attend: true,
-  };
-  const props = {
-    data: [item],
-    isAdmin: false,
-    busy: false,
-    openCase: noop,
-    userName: noop,
-    setError: noop,
-    load: noop,
-  };
-  const html = renderToStaticMarkup(createElement(AlertTable, props));
-  assert.match(html, /alert-urgent/);
-  assert.match(html, /Marcar atendido/);
-  assert.match(html, /Cliente/);
-  assert.doesNotMatch(html, /Marcar leído/);
-  assert.doesNotMatch(
-    renderToStaticMarkup(
-      createElement(AlertTable, {
-        ...props,
-        data: [{ ...item, can_attend: false }],
-      }),
-    ),
-    /Marcar atendido/,
-  );
-  assert.match(
-    renderToStaticMarkup(
-      createElement(AlertTable, {
-        ...props,
-        data: [{ ...item, urgent: false }],
-      }),
-    ),
-    /Marcar leído/,
-  );
-});
-
-test("leer y atender alertas tienen acciones independientes", async () => {
-  const calls = capture({ ok: true });
-  await alertsService.read(7);
-  await alertsService.attend(7);
-  assert.deepEqual(
-    calls.map((call) => [new URL(call.url).pathname, call.method]),
-    [
-      ["/alerts/7/read", "POST"],
-      ["/alerts/7/attend", "POST"],
-    ],
-  );
-});
-test("servicios no muestran honorarios ni acciones financieras a staff", () => {
-  const props = {
-    isAdmin: false,
-    services: [
+    finance: { fee: "12000.00", paid: "2000.00", balance: "10000.00" },
+    upcoming_payments: [
       {
         id: 1,
-        scope: "Defensa",
-        stage: "Inicial",
-        mode: "etapa",
-        contract_date: "2026-10-06",
-        fee: "9876.54",
-        installments: [],
-        payments: [],
+        case_id: 7,
+        client_code: client.code,
+        client_name: client.name,
+        process_type: item.process_type,
+        number: 1,
+        due_date: "2026-10-15",
+        balance: "9876.54",
       },
     ],
   };
-  const staff = renderToStaticMarkup(createElement(CaseServices, props));
-  assert.match(staff, /Defensa/);
-  assert.doesNotMatch(staff, /Registrar abono|Contratar servicio|9[,.]876/);
-  assert.match(
-    renderToStaticMarkup(
-      createElement(CaseServices, { ...props, isAdmin: true }),
-    ),
-    /Registrar abono/,
+  const opened = [];
+  const navigated = [];
+  const props = {
+    actor: admin,
+    dashboard,
+    alerts: [],
+    isAdmin: true,
+    busy: false,
+    load: noop,
+    openCase: (id) => opened.push(id),
+    setPage: (page) => navigated.push(page),
+  };
+  const html = render(DashboardPage, props);
+  for (const label of [
+    "Panel del día",
+    "Casos activos",
+    "Alertas por revisar",
+    "Saldo por cobrar",
+    "Cobros próximos",
+  ])
+    assert.ok(html.includes(label));
+  assert.doesNotMatch(html, /class="eyebrow">[1-4]\s*·/);
+  const tree = DashboardPage(props);
+  findButtons(tree, "Ver todas las alertas")[0].props.onClick();
+  findButtons(tree, "Ver caso")[0].props.onClick();
+  assert.deepEqual(navigated, ["alertas"]);
+  assert.deepEqual(opened, [7]);
+  const team = render(DashboardPage, {
+    ...props,
+    actor: staff,
+    isAdmin: false,
+  });
+  assert.match(team, /Casos concluidos/);
+  assert.doesNotMatch(
+    team,
+    /Saldo por cobrar|Cobros próximos|Honorarios pendientes|9[,.]876/,
+  );
+  const calls = capture(dashboard);
+  assert.deepEqual(await dashboardService.get(), dashboard);
+  assert.equal(calls[0].url, "https://lexio.test/dashboard");
+});
+test("navegación separa Inicio, Clientes y Casos sin bitácora independiente", () => {
+  const props = {
+    actor: admin,
+    page: "inicio",
+    onNavigate: noop,
+    onLogout: noop,
+    children: "",
+  };
+  const html = render(AppShell, props);
+  for (const label of [
+    "Inicio",
+    "Clientes",
+    "Casos",
+    "Alertas y vencimientos",
+    "Reportes",
+    "Administración",
+  ])
+    assert.ok(html.includes(`title="${label}"`));
+  assert.doesNotMatch(
+    html,
+    /title="Ficha integral"|title="Bitácora del caso"|1 ·|2 ·|3 ·|4 ·/,
+  );
+  assert.doesNotMatch(
+    render(AppShell, { ...props, actor: staff }),
+    /title="Administración"/,
   );
 });
-test("selector de responsables conserva usuarios autorizados por rol", () => {
-  const users = [
-    user,
-    { ...user, id: 2, name: "Responsable", role: "staff" },
-    { ...user, id: 3, name: "Otro", role: "staff" },
-  ];
+test("filtros envían nombres del contrato y omiten valores vacíos", async () => {
+  const calls = capture([]);
+  await casesService.list({ search: "Ana & José", area: "", status: "activo" });
+  await casesService.list();
+  const url = new URL(calls[0].url);
+  assert.equal(url.searchParams.get("search"), "Ana & José");
+  assert.equal(url.searchParams.has("area"), false);
+  assert.equal(calls[1].url, "https://lexio.test/cases");
+  await casesService.list({ client_id: String(client.id) });
+  assert.deepEqual(
+    [...new URL(calls[2].url).searchParams],
+    [["client_id", "1"]],
+  );
+});
+test("clientes ofrecen acciones separadas vinculadas al mismo cliente", () => {
+  const selected = [];
   const props = {
-    actor: users[1],
-    users,
-    isAdmin: false,
-    authorized: [user, users[1]],
-    caseData: { responsible_id: 2 },
-    tasks: [],
+    actor: admin,
+    clients: [client],
+    busy: false,
+    search: "",
+    setSearch: noop,
+    load: noop,
+    create: noop,
+    edit: (value) => selected.push(["edit", value]),
+    viewCases: (value) => selected.push(["view", value]),
+    newCase: (value) => selected.push(["new", value]),
   };
+  const html = render(ClientsPage, props);
   assert.doesNotMatch(
-    renderToStaticMarkup(createElement(ResponsibleSelect, props)),
-    /Otro/,
+    html,
+    /Honorarios|Control financiero|Bitácora|link-button/,
+  );
+  const tree = ClientsPage(props);
+  for (const label of ["Ver casos", "Nuevo caso", "Corregir datos"])
+    assert.match(
+      findButtons(tree, label)[0].props.className,
+      /^(primary|secondary)\b/,
+    );
+  findButtons(tree, "Ver casos")[0].props.onClick();
+  findButtons(tree, "Nuevo caso")[0].props.onClick();
+  findButtons(tree, "Corregir datos")[0].props.onClick();
+  assert.deepEqual(selected, [
+    ["view", client],
+    ["new", client],
+    ["edit", client],
+  ]);
+  const team = render(ClientsPage, { ...props, actor: staff });
+  assert.match(team, />Ver casos</);
+  assert.match(team, />Nuevo caso</);
+  assert.doesNotMatch(team, /Corregir datos|>Nuevo cliente</);
+  assert.doesNotMatch(
+    render(ClientsPage, {
+      ...props,
+      actor: { ...staff, can_create_cases: false },
+    }),
+    />Nuevo caso</,
+  );
+});
+test("datos personales se crean y corrigen exclusivamente en el formulario de clientes", async () => {
+  const html = render(ClientForm, { saved: noop });
+  for (const name of [
+    "name",
+    "document_type",
+    "document_number",
+    "phone",
+    "email",
+    "address",
+  ])
+    assert.ok(html.includes(`name="${name}"`));
+  assert.doesNotMatch(
+    html,
+    /name="code"|name="process_type"|name="initial_stage"|Honorarios|Agregar cuota/,
+  );
+  const calls = capture(client);
+  const form = new FormData();
+  for (const [name, value] of Object.entries({
+    name: client.name,
+    document_type: client.document_type,
+    document_number: client.document_number,
+    phone: client.phone,
+    email: client.email,
+    address: client.address,
+  }))
+    form.set(name, value);
+  form.set("code", "NO-EDITABLE");
+  form.set("tenant_id", "99");
+  await ClientForm({ saved: noop }).props.submit(form);
+  await ClientForm({ item: client, saved: noop }).props.submit(form);
+  assert.deepEqual(
+    calls.map((call) => [new URL(call.url).pathname, call.method]),
+    [
+      ["/clients", "POST"],
+      ["/clients/1", "PUT"],
+    ],
+  );
+  assert.deepEqual(JSON.parse(calls[0].body), {
+    name: client.name,
+    document_type: client.document_type,
+    document_number: client.document_number,
+    phone: client.phone,
+    email: client.email,
+    address: client.address,
+  });
+  assert.equal("code" in JSON.parse(calls[1].body), false);
+  assert.equal("tenant_id" in JSON.parse(calls[1].body), false);
+  assert.match(render(ClientForm, { item: client, saved: noop }), /CL-000001/);
+});
+test("lista de casos ofrece botones claros y un solo estado de proceso", () => {
+  let created = false;
+  const props = {
+    actor: admin,
+    isAdmin: true,
+    cases: [item],
+    clients: [client],
+    busy: false,
+    search: "",
+    area: "",
+    status: "",
+    clientFilter: "",
+    setSearch: noop,
+    setArea: noop,
+    setStatus: noop,
+    setClientFilter: noop,
+    load: noop,
+    clearFilters: noop,
+    openCase: noop,
+    create: () => {
+      created = true;
+    },
+  };
+  const html = render(CasesPage, props);
+  assert.match(html, />Ver caso</);
+  assert.match(html, />Limpiar filtros</);
+  assert.match(html, />Nuevo caso</);
+  assert.doesNotMatch(html, /suspendido|link-button/);
+  findButtons(CasesPage(props), "Nuevo caso")[0].props.onClick();
+  assert.equal(created, true);
+});
+test("dos casos del mismo cliente conservan botones de acceso independientes", () => {
+  const opened = [];
+  const props = {
+    actor: admin,
+    isAdmin: true,
+    cases: [item, { ...item, id: 2, process_type: "Desalojo" }],
+    clients: [client],
+    busy: false,
+    search: "",
+    area: "",
+    status: "",
+    clientFilter: "",
+    setSearch: noop,
+    setArea: noop,
+    setStatus: noop,
+    setClientFilter: noop,
+    load: noop,
+    clearFilters: noop,
+    openCase: (id) => opened.push(id),
+    create: noop,
+  };
+  const html = render(CasesPage, props);
+  assert.match(html, /Cobro de deuda/);
+  assert.match(html, /Desalojo/);
+  const buttons = findButtons(CasesPage(props), "Ver caso");
+  assert.equal(buttons.length, 2);
+  buttons.forEach((button) => button.props.onClick());
+  assert.deepEqual(opened, [1, 2]);
+});
+test("crear caso selecciona un cliente existente y reúne proceso y honorarios", () => {
+  const html = render(CaseForm, {
+    actor: admin,
+    users: [admin, staff],
+    clients: [client],
+    saved: noop,
+  });
+  for (const text of [
+    "Tipo de proceso",
+    "Control financiero",
+    "Honorarios totales",
+    "Agregar cuota",
+  ])
+    assert.ok(html.includes(text));
+  assert.match(html, /name="client_id"/);
+  assert.match(html, /CL-000001/);
+  assert.match(html, /name="initial_stage"/);
+  assert.doesNotMatch(
+    html,
+    /name="name"|name="document_number"|name="phone"|name="email"|name="address"|current_stage|subject|Contratar servicio|Evento/,
+  );
+});
+test("nuevo caso desde un cliente conserva la selección y orienta si falta registrarlo", () => {
+  const second = { ...client, id: 2, code: "CL-000002", name: "Luis Pérez" };
+  const props = {
+    actor: admin,
+    users: [admin],
+    clients: [client, second],
+    clientId: 2,
+    saved: noop,
+  };
+  assert.match(
+    render(CaseForm, props),
+    /<option value="2" selected="">CL-000002 · Luis Pérez<\/option>/,
   );
   assert.match(
-    renderToStaticMarkup(
-      createElement(ResponsibleSelect, { ...props, isAdmin: true }),
-    ),
-    /David/,
+    render(CaseForm, { ...props, clients: [], clientId: undefined }),
+    /Primero registra al cliente en la página Clientes/,
   );
+});
+test("editar proceso como staff conserva datos de cliente y oculta finanzas", () => {
+  const html = render(CaseForm, {
+    actor: staff,
+    users: [staff],
+    clients: [client],
+    item,
+    saved: noop,
+  });
+  assert.match(html, /Ana Torres/);
+  assert.match(html, /name="process_type"/);
+  assert.doesNotMatch(
+    html,
+    /name="name"|name="document_number"|Honorarios|Control financiero/,
+  );
+});
+test("honorarios y montos se conservan al editar caso con abonos", () => {
+  const html = render(CaseForm, {
+    actor: admin,
+    users: [admin, staff],
+    clients: [client],
+    item,
+    saved: noop,
+  });
+  assert.match(html, /los honorarios y montos se conservan/);
+  assert.equal((html.match(/readOnly=""/g) || []).length, 3);
+  assert.match(html, /name="due_date_0"/);
+  assert.match(html, /name="due_date_1"/);
+  assert.doesNotMatch(html, /Agregar cuota|Quitar cuota/);
+  assert.doesNotMatch(
+    html,
+    /name="name"|name="document_number"|name="phone"|name="email"|name="address"/,
+  );
+});
+test("editar un caso conserva el cliente y las cuotas sin reenviar datos personales", async () => {
+  const calls = capture(item);
+  const form = new FormData();
+  for (const [name, value] of Object.entries({
+    area: item.area,
+    process_type: item.process_type,
+    initial_stage: item.initial_stage,
+    status: "concluido",
+    responsible_id: String(staff.id),
+    fee: item.fee,
+    amount_0: "500.00",
+    due_date_0: "2026-10-16",
+    amount_1: "500.00",
+    due_date_1: "2026-10-20",
+  }))
+    form.set(name, value);
+  form.set("name", "No debe modificar al cliente");
+  await formProps(CaseForm, {
+    actor: admin,
+    users: [admin, staff],
+    clients: [client],
+    item,
+    saved: noop,
+  }).submit(form);
+  assert.equal(calls[0].url, "https://lexio.test/cases/1");
+  assert.equal(calls[0].method, "PUT");
+  const data = JSON.parse(calls[0].body);
+  assert.equal(data.status, "concluido");
+  assert.deepEqual(data.installments, [
+    { id: 1, amount: "500.00", due_date: "2026-10-16" },
+    { id: 2, amount: "500.00", due_date: "2026-10-20" },
+  ]);
+  for (const name of ["client", "client_id", "name", "fee", "tenant_id"])
+    assert.equal(name in data, false);
+});
+test("detalle destaca primero el cliente y oculta importes al equipo", () => {
+  const props = {
+    selected: item,
+    actor: admin,
+    users: [admin, staff],
+    clients: [client],
+    back: noop,
+  };
+  const html = render(CaseWorkspace, props);
+  assert.ok(
+    html.indexOf('class="client-title">Ana Torres') <
+      html.indexOf("<h2>Cobro de deuda"),
+  );
+  assert.match(html, /Registrar abono/);
+  assert.match(html, /Total abonado/);
+  assert.match(html, /Cuota 1/);
+  assert.match(html, /Bitácora del caso/);
+  const team = render(CaseWorkspace, { ...props, actor: staff });
+  assert.doesNotMatch(
+    team,
+    /Control financiero|Registrar abono|Eliminar abono/,
+  );
+  assert.doesNotMatch(
+    team,
+    /Contratar servicio|Aplicar crédito|Vincular evento|Archivos/,
+  );
+});
+test("selector conserva exactamente las once ramas", () => {
+  const html = render(AreaSelect, {
+    name: "area",
+    required: true,
+    defaultValue: "Antigua",
+  });
+  assert.equal((html.match(/<option /g) || []).length, 12);
+  for (const area of LEGAL_AREAS) assert.ok(html.includes(`value="${area}"`));
+  assert.equal(legalArea("Fiscalía"), "Fiscalía");
+  assert.throws(() => legalArea("Otra"), /Selecciona una rama/);
+});
+test("un cliente puede tener varios casos con honorarios propios", async () => {
+  const calls = capture(item);
+  const data = {
+    client_id: client.id,
+    area: "Civil",
+    process_type: "Cobro",
+    initial_stage: "Demanda",
+    status: "activo",
+    responsible_id: admin.id,
+    fee: "1000.00",
+    installments: [{ amount: "1000.00", due_date: "2026-10-15" }],
+  };
+  const form = new FormData();
+  for (const [name, value] of Object.entries({
+    client_id: String(client.id),
+    area: data.area,
+    process_type: data.process_type,
+    initial_stage: data.initial_stage,
+    status: data.status,
+    responsible_id: String(admin.id),
+    fee: data.fee,
+    amount_0: "1000.00",
+    due_date_0: "2026-10-15",
+  }))
+    form.set(name, value);
+  form.set("name", "Estos datos se editan en Clientes");
+  const props = {
+    actor: admin,
+    users: [admin],
+    clients: [client],
+    saved: noop,
+  };
+  await formProps(CaseForm, props).submit(form);
+  assert.equal(calls[0].url, "https://lexio.test/cases");
+  assert.deepEqual(JSON.parse(calls[0].body), data);
+  assert.equal("tenant_id" in data, false);
+  assert.equal("client" in JSON.parse(calls[0].body), false);
+  form.set("process_type", "Desalojo");
+  form.set("fee", "2000.00");
+  form.set("amount_0", "2000.00");
+  form.set("due_date_0", "2026-10-20");
+  await formProps(CaseForm, props).submit(form);
+  const second = JSON.parse(calls[1].body);
+  assert.equal(second.client_id, data.client_id);
+  assert.equal(second.process_type, "Desalojo");
+  assert.equal(second.fee, "2000.00");
+  assert.equal("client" in second, false);
+});
+test("bitácora envía fecha, descripción y alerta; responsable viene del usuario autenticado", async () => {
+  const calls = capture({});
+  const form = new FormData();
+  form.set("action_date", "2026-10-08");
+  form.set("description", "Presentar escrito");
+  form.set("alert_date", "2026-10-15");
+  await EntryForm({
+    caseId: 1,
+    actor: staff,
+    done: async () => {},
+  }).props.submit(form);
+  assert.equal(calls[0].url, "https://lexio.test/cases/1/entries");
+  assert.equal(calls[0].method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].body), {
+    action_date: "2026-10-08",
+    description: "Presentar escrito",
+    alert_date: "2026-10-15",
+  });
+  const html = render(EntryForm, { caseId: 1, actor: staff, done: noop });
+  assert.match(html, /Responsable: Abogado/);
+  assert.match(html, /se guardan automáticamente/);
+  assert.doesNotMatch(html, /is_payment_event|responsible_id/);
+});
+test("editar actuación precarga sus fechas y texto y conserva el registro original", () => {
+  const entry = {
+    id: 7,
+    case_id: 1,
+    action_date: "2026-10-07",
+    description: "Presentar escrito original",
+    alert_date: "2026-10-15",
+    attended: true,
+    registered_by: staff.id,
+    responsible_name: staff.name,
+    created_at: "2026-10-09T02:30:00",
+  };
+  const html = render(EntryForm, {
+    caseId: 1,
+    actor: admin,
+    item: entry,
+    done: noop,
+  });
+  assert.match(html, /name="action_date"[^>]*value="2026-10-07"/);
+  assert.match(html, /name="alert_date"[^>]*value="2026-10-15"/);
+  assert.match(
+    html,
+    /<textarea[^>]*name="description"[^>]*>Presentar escrito original<\/textarea>/,
+  );
+  assert.match(html, /Guardar cambios/);
+  assert.match(html, /Responsable: Abogado/);
+  assert.match(html, /8 de octubre de 2026/);
+  assert.match(html, /9:30/);
+  assert.match(html, /ya está atendida/);
+  assert.doesNotMatch(
+    html,
+    /Responsable: David|name="registered_by"|name="created_at"|name="attended"|type="checkbox"/,
+  );
+});
+test("corregir actuación usa PUT y envía solo fecha, descripción y alerta", async () => {
+  const entry = {
+    id: 7,
+    case_id: 1,
+    action_date: "2026-10-07",
+    description: "Escrito original",
+    alert_date: "2026-10-15",
+    attended: true,
+    registered_by: staff.id,
+    responsible_name: staff.name,
+    created_at: "2026-10-09T02:30:00",
+  };
+  const calls = capture(entry);
+  let completed = 0;
+  const form = new FormData();
+  form.set("action_date", "2026-10-06");
+  form.set("description", "Descripción corregida");
+  form.set("alert_date", "2026-10-20");
+  form.set("registered_by", String(admin.id));
+  form.set("created_at", "2026-10-10T00:00:00");
+  form.set("attended", "false");
+  const props = {
+    caseId: 1,
+    actor: admin,
+    item: entry,
+    done: async () => {
+      completed += 1;
+    },
+  };
+  await EntryForm(props).props.submit(form);
+  assert.equal(calls[0].url, "https://lexio.test/entries/7");
+  assert.equal(calls[0].method, "PUT");
+  assert.deepEqual(JSON.parse(calls[0].body), {
+    action_date: "2026-10-06",
+    description: "Descripción corregida",
+    alert_date: "2026-10-20",
+  });
+  form.set("alert_date", "");
+  await EntryForm(props).props.submit(form);
+  assert.deepEqual(JSON.parse(calls[1].body), {
+    action_date: "2026-10-06",
+    description: "Descripción corregida",
+    alert_date: null,
+  });
+  assert.equal(completed, 2);
+});
+test("editar actuaciones requiere permiso incluso si ya están atendidas", () => {
+  const pending = {
+    id: 7,
+    case_id: 1,
+    action_date: "2026-10-07",
+    description: "Escrito",
+    alert_date: "2026-10-15",
+    attended: false,
+    responsible_name: staff.name,
+    created_at: "2026-10-09T02:30:00",
+    can_attend: true,
+  };
+  const attended = { ...pending, id: 8, attended: true };
+  const withoutAlert = { ...pending, id: 9, alert_date: null };
+  const edited = [];
+  const props = {
+    entries: [pending, attended, withoutAlert],
+    canEdit: true,
+    canAttend: true,
+    edit: (value) => edited.push(value),
+    load: noop,
+  };
+  const html = render(EntryTable, props);
+  assert.equal((html.match(/>Editar</g) || []).length, 3);
+  assert.equal((html.match(/>Marcar atendido</g) || []).length, 1);
+  const tree = formProps(EntryTable, props);
+  findButtons({ props: tree }, "Editar").forEach((button) => {
+    assert.equal(button.props.className, "secondary");
+    button.props.onClick();
+  });
+  assert.deepEqual(edited, [pending, attended, withoutAlert]);
+  assert.match(
+    render(EntryTable, { ...props, busy: true }),
+    /<button class="secondary" disabled="">Editar<\/button>/,
+  );
+  assert.doesNotMatch(
+    render(EntryTable, { ...props, canEdit: false, canAttend: false }),
+    />Editar<|Marcar atendido/,
+  );
+  assert.doesNotMatch(
+    render(EntryTable, { ...props, edit: undefined }),
+    />Editar</,
+  );
+});
+test("bitácora permite atender únicamente obligaciones pendientes con permiso", () => {
+  const entry = {
+    id: 1,
+    case_id: 1,
+    action_date: "2026-10-08",
+    description: "Presentar escrito",
+    alert_date: "2026-10-15",
+    attended: false,
+    responsible_name: "Abogado",
+    created_at: "2026-10-08T15:00:00",
+    client_code: client.code,
+    client_name: client.name,
+    process_type: item.process_type,
+    can_attend: true,
+  };
+  const props = {
+    entries: [entry],
+    showClient: true,
+    load: noop,
+    openCase: noop,
+  };
+  assert.match(render(EntryTable, props), /Marcar atendido/);
+  assert.doesNotMatch(
+    render(EntryTable, { ...props, entries: [{ ...entry, attended: true }] }),
+    /Marcar atendido/,
+  );
+  assert.doesNotMatch(
+    render(EntryTable, {
+      ...props,
+      entries: [{ ...entry, can_attend: false }],
+    }),
+    /Marcar atendido/,
+  );
+});
+test("abonos van a primera cuota y distribuyen excedente con centavos exactos", () => {
+  const quotas = [
+    { id: 2, number: 2, balance: "500.00" },
+    { id: 1, number: 1, balance: "500.00" },
+  ];
+  assert.deepEqual(automaticAllocations("400", quotas), { 1: "400.00" });
+  assert.deepEqual(automaticAllocations("650", quotas), {
+    1: "500.00",
+    2: "150.00",
+  });
+  assert.deepEqual(automaticAllocations("500.01", quotas), {
+    1: "500.00",
+    2: "0.01",
+  });
+  assert.deepEqual(
+    automaticAllocations("100", [{ ...quotas[1], balance: "0.00" }, quotas[0]]),
+    { 2: "100.00" },
+  );
+});
+test("abono es simple, automático por defecto y permite elegir primera cuota", async () => {
+  const html = render(PaymentForm, { item, done: noop });
+  assert.match(html, /Automático · primera cuota pendiente/);
+  assert.match(html, /Aplicar primero a/);
+  assert.doesNotMatch(html, /Comprobante|crédito|name="application/);
+  const calls = capture({});
+  await financeService.recordPayment(1, {
+    payment_date: "2026-10-08",
+    amount: "400.00",
+    method: "Efectivo",
+  });
+  await financeService.recordPayment(1, {
+    payment_date: "2026-10-08",
+    amount: "200.00",
+    method: "",
+    installment_id: 2,
+  });
+  assert.equal(calls[0].url, "https://lexio.test/cases/1/payments");
+  assert.equal(JSON.parse(calls[0].body).amount, "400.00");
+  assert.equal("installment_id" in JSON.parse(calls[0].body), false);
+  assert.equal(JSON.parse(calls[1].body).installment_id, 2);
+});
+test("alertas diferencian leer de atender y cobros no ofrecen atendido", () => {
+  const entry = {
+    id: 1,
+    case_id: 1,
+    client_code: client.code,
+    client_name: client.name,
+    kind: "legal",
+    description: "Presentar escrito",
+    target_date: "2026-10-15",
+    notice_date: "2026-10-08",
+    anticipation: 5,
+    urgent: false,
+    responsible_name: "Abogado",
+    entry_id: 1,
+    can_attend: true,
+  };
+  const props = {
+    data: [entry],
+    isAdmin: false,
+    busy: false,
+    load: noop,
+    openCase: noop,
+  };
+  assert.match(render(AlertTable, props), /Marcar leído/);
+  assert.match(render(AlertTable, props), /Marcar atendido/);
+  assert.doesNotMatch(
+    render(AlertTable, { ...props, data: [{ ...entry, urgent: true }] }),
+    /Marcar leído/,
+  );
+  assert.doesNotMatch(
+    render(AlertTable, {
+      ...props,
+      data: [{ ...entry, kind: "pago", balance: "999.00" }],
+    }),
+    /Marcar atendido|999|<th>Saldo/,
+  );
+  assert.match(
+    render(AlertTable, { ...props, isAdmin: true }),
+    /<th>Saldo de honorarios/,
+  );
+});
+test("leer y atender usan endpoints independientes", async () => {
+  const calls = capture({});
+  await alertsService.read(5);
+  await casesService.attendEntry(2);
+  assert.deepEqual(
+    calls.map((call) => [new URL(call.url).pathname, call.method]),
+    [
+      ["/alerts/5/read", "POST"],
+      ["/entries/2/attend", "POST"],
+    ],
+  );
+});
+test("reporte único agrupa casos y financieras por rama respetando roles", async () => {
+  const report = {
+    rows: [
+      {
+        area: "Civil",
+        total_cases: 1,
+        active_cases: 1,
+        concluded_cases: 0,
+        fee: "1000",
+        paid: "400",
+        balance: "600",
+      },
+    ],
+    totals: {
+      total_cases: 1,
+      active_cases: 1,
+      concluded_cases: 0,
+      fee: "1000",
+      paid: "400",
+      balance: "600",
+    },
+  };
+  const props = { report, isAdmin: true, busy: false, load: noop };
+  const html = render(Reports, props);
+  assert.match(html, /Total facturado/);
+  assert.match(html, /Efectivo cobrado/);
+  assert.match(html, /Saldo pendiente/);
+  assert.doesNotMatch(html, /Corte|Servicio|cutoff/);
+  assert.doesNotMatch(
+    render(Reports, { ...props, isAdmin: false }),
+    /Total facturado|Efectivo cobrado|Saldo pendiente/,
+  );
+  const calls = capture(report);
+  await reportsService.list();
+  assert.equal(calls[0].url, "https://lexio.test/reports");
+});
+test("administración muestra fecha y hora legibles sin recursos ni JSON", () => {
+  const audit = [
+    {
+      id: 1,
+      created_at: "2026-10-09T02:30:00",
+      user_id: 1,
+      user_name: "David",
+      action: "Registró un abono",
+      resource: "lexio_payments",
+      changes: '{"amount":"400"}',
+    },
+  ];
+  const html = render(AdministrationPage, {
+    users: [admin],
+    audit,
+    setEditUser: noop,
+    setModal: noop,
+  });
+  assert.match(html, /8 de octubre de 2026/);
+  assert.match(html, /9:30/);
+  assert.doesNotMatch(
+    html,
+    /lexio_payments|amount|Recurso|Registro UTC|Anticipación de avisos/,
+  );
+});
+test("fecha y hora se muestran en Perú con cambios de día y formatos UTC", () => {
+  const local = dateTimeLabels("2026-10-09T02:30:00");
+  assert.equal(local.date, "8 de octubre de 2026");
+  assert.match(local.time, /9:30/);
+  assert.deepEqual(dateTimeLabels("2026-10-09T02:30:00Z"), local);
+  assert.deepEqual(dateTimeLabels("2026-10-08T21:30:00-05:00"), local);
+  assert.equal(
+    dateLabel("2026-10-08T21:30:00-05:00"),
+    dateLabel("2026-10-09T02:30:00Z"),
+  );
+});
+test("usuarios conservan contraseña mínima de seis y permisos sin correo de acceso", async () => {
+  assert.match(render(UserForm, { done: noop }), /minLength="6"/i);
+  const calls = capture({});
+  const form = new FormData();
+  form.set("name", "Juan");
+  form.set("username", "juan");
+  form.set("password", "fixture");
+  await UserForm({ done: async () => {} }).props.submit(form);
+  assert.equal(JSON.parse(calls[0].body).username, "juan");
+  assert.equal("email" in JSON.parse(calls[0].body), false);
 });

@@ -13,7 +13,7 @@ export default function LoginPage({ setActor }: Props) {
         <div className="brand">
           <Scale size={36} />
           <span>
-            Lexio<small>LEXCONTERRA GROUP</small>
+            Lexio
           </span>
         </div>
         <p className="eyebrow">Control jurídico y gerencial</p>

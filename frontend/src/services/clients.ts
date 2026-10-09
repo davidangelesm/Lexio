@@ -1,23 +1,16 @@
-import type { Client, FileLink } from "../types";
-import type { ClientInput, FileInput } from "../types/requests";
+import type { Client } from "../types";
+import type { ClientInput } from "../types/requests";
 import { query } from "../utils/query";
 import { api } from "./http";
-
 export const clientsService = {
   list(filters: Record<string, string> = {}): Promise<Client[]> {
-    return api<Client[]>(`/clients?${query(filters)}`, "GET");
+    const params = query(filters);
+    return api<Client[]>(`/clients${params ? `?${params}` : ""}`);
   },
-  save(id: number | undefined, data: ClientInput): Promise<Client> {
-    return api<Client>(
-      id === undefined ? `/clients` : `/clients/${id}`,
-      id === undefined ? "POST" : "PUT",
-      data,
-    );
+  create(data: ClientInput): Promise<Client> {
+    return api<Client>("/clients", "POST", data);
   },
-  listFiles(id: number): Promise<FileLink[]> {
-    return api<FileLink[]>(`/clients/${id}/files`, "GET");
-  },
-  createFile(id: number, data: FileInput): Promise<unknown> {
-    return api<unknown>(`/clients/${id}/files`, "POST", data);
+  update(id: number, data: ClientInput): Promise<Client> {
+    return api<Client>(`/clients/${id}`, "PUT", data);
   },
 };

@@ -1,22 +1,30 @@
 import { RefreshCw } from "lucide-react";
-import type { ReactNode } from "react";
-import { Card } from "../../components/ui/index";
-import type { LexioState } from "../../hooks/useLexio";
-import type { Alert } from "../../types/index";
-
-type Props = Pick<LexioState, "busy" | "load" | "alerts"> & {
-  alertTable: (data: Alert[]) => ReactNode;
+import { Card } from "../../components/ui";
+import type { Alert } from "../../types";
+import AlertTable from "./components/AlertTable";
+type Props = {
+  alerts: Alert[];
+  isAdmin: boolean;
+  busy: boolean;
+  load: () => Promise<void>;
+  openCase: (id: number) => Promise<void>;
 };
-export default function AlertsPage({ busy, load, alertTable, alerts }: Props) {
+export default function AlertsPage({
+  alerts,
+  isAdmin,
+  busy,
+  load,
+  openCase,
+}: Props) {
   return (
     <>
       <div className="page-head">
         <div>
-          <p className="eyebrow">Seguimiento del estudio</p>
-          <h1>Centro de alertas</h1>
+          <p className="eyebrow">Plazos y obligaciones</p>
+          <h1>Alertas y vencimientos</h1>
           <p>
-            Leído descarta un aviso. Atendido completa la tarea y retira sus
-            alertas. Las tareas pendientes después del vencimiento son urgentes.
+            Avisos a los 5, 3 y 1 días hábiles antes del vencimiento, de lunes a
+            viernes.
           </p>
         </div>
         <button
@@ -24,11 +32,23 @@ export default function AlertsPage({ busy, load, alertTable, alerts }: Props) {
           disabled={busy}
           onClick={() => void load()}
         >
-          <RefreshCw size={14} />
+          <RefreshCw size={15} />
           Actualizar
         </button>
       </div>
-      <Card>{alertTable(alerts)}</Card>
+      <p className="notice">
+        Leer descarta este aviso. Marcar atendido completa la obligación legal.
+        Los avisos de pago se resuelven al registrar el abono.
+      </p>
+      <Card>
+        <AlertTable
+          data={alerts}
+          isAdmin={isAdmin}
+          busy={busy}
+          load={load}
+          openCase={openCase}
+        />
+      </Card>
     </>
   );
 }

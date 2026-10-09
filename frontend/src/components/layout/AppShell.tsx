@@ -1,8 +1,7 @@
 import {
   Bell,
-  CalendarDays,
   ChartNoAxesCombined,
-  FolderOpen,
+  ClipboardList,
   LayoutDashboard,
   LogOut,
   Scale,
@@ -12,7 +11,6 @@ import {
 import type { ReactNode } from "react";
 import type { User } from "../../types";
 import { dateLabel, localDate } from "../../utils/format";
-
 type Props = {
   actor: User;
   page: string;
@@ -31,10 +29,10 @@ export default function AppShell({
 }: Props) {
   const isAdmin = actor.role === "admin";
   const navigation = [
-    { key: "panel", label: "Panel del día", Icon: LayoutDashboard },
+    { key: "inicio", label: "Inicio", Icon: LayoutDashboard },
     { key: "clientes", label: "Clientes", Icon: Users },
-    { key: "casos", label: "Casos", Icon: FolderOpen },
-    { key: "alertas", label: "Centro de alertas", Icon: Bell },
+    { key: "casos", label: "Casos", Icon: ClipboardList },
+    { key: "alertas", label: "Alertas y vencimientos", Icon: Bell },
     { key: "reportes", label: "Reportes", Icon: ChartNoAxesCombined },
     ...(isAdmin
       ? [{ key: "usuarios", label: "Administración", Icon: ShieldCheck }]
@@ -56,9 +54,7 @@ export default function AppShell({
               title={label}
               key={key}
               className={page === key ? "active" : ""}
-              onClick={() => {
-                onNavigate(key);
-              }}
+              onClick={() => onNavigate(key)}
             >
               <Icon size={18} />
               <span>{label}</span>
@@ -67,10 +63,9 @@ export default function AppShell({
         </nav>
         <div className="profile">
           <strong>{actor.name}</strong>
-          <small>
-            {isAdmin ? "Administrador · finanzas" : "Equipo jurídico"}
-          </small>
-          <button onClick={onLogout}>
+          <small>{isAdmin ? "Administrador" : "Equipo jurídico"}</small>
+          <br />
+          <button className="secondary" onClick={onLogout}>
             <LogOut size={15} />
             Cerrar sesión
           </button>
@@ -79,16 +74,10 @@ export default function AppShell({
       <div className="workspace">
         <header className="topbar">
           <span>
-            LEXCONTERRA GROUP /{" "}
+            {" "}
             {caseCode || navigation.find((x) => x.key === page)?.label}
           </span>
-          <div className="flex items-center gap-3">
-            <CalendarDays size={15} />
-            {dateLabel(localDate())}
-            <span className="badge">
-              {isAdmin ? "Administración" : "Acceso autorizado"}
-            </span>
-          </div>
+          <span>{dateLabel(localDate())}</span>
         </header>
         <main className="content">{children}</main>
       </div>

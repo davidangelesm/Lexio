@@ -11,11 +11,12 @@ export async function api<T>(
   method = "GET",
   body?: unknown,
 ): Promise<T> {
+  const requestToken = accessToken;
   const response = await fetch(`${base}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(requestToken ? { Authorization: `Bearer ${requestToken}` } : {}),
     },
     signal: AbortSignal.timeout(20000),
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -24,7 +25,11 @@ export async function api<T>(
     const data: {
       detail?: string | { msg: string; loc: (string | number)[] }[];
     } = await response.json().catch(() => ({}));
-    if (response.status === 401 && accessToken) {
+    if (
+      response.status === 401 &&
+      requestToken &&
+      requestToken === accessToken
+    ) {
       setToken("");
       window.dispatchEvent(new Event("lexio-session-expired"));
     }

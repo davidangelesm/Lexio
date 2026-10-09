@@ -1,14 +1,10 @@
 import type { Alert } from "../types";
 import { api } from "./http";
-
 export const alertsService = {
   list(): Promise<Alert[]> {
-    return api<Alert[]>(`/alerts`, "GET");
+    return api<Alert[]>("/alerts");
   },
   read(id: number): Promise<unknown> {
-    return api<unknown>(`/alerts/${id}/read`, "POST");
-  },
-  attend(id: number): Promise<unknown> {
-    return api<unknown>(`/alerts/${id}/attend`, "POST");
+    return api(`/alerts/${id}/read`, "POST");
   },
 };

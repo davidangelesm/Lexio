@@ -92,7 +92,7 @@ export default function UserForm({ editUser, done }: Props) {
       </div>
       <p className="full muted text-xs">
         El usuario no distingue mayúsculas y minúsculas. Debe ser único.{" "}
-        Autoriza cada caso desde su ficha. Estos permisos no conceden acceso
+        Autoriza al equipo desde cada caso. Estos permisos no conceden acceso
         financiero.
       </p>
     </Form>

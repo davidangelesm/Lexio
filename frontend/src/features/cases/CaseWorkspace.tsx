@@ -1,117 +1,88 @@
-import { ArrowLeft, Pencil } from "lucide-react";
-import { Badge, Card, Modal } from "../../components/ui/index";
-import ResponsibleSelect from "../../features/cases/components/ResponsibleSelect";
-import type { Case, User } from "../../types/index";
-import { dateLabel } from "../../utils/format";
-import CaseAccess from "./components/CaseAccess";
-import CaseEvents from "./components/CaseEvents";
-import CaseFiles from "./components/CaseFiles";
-import CaseServices from "./components/CaseServices";
-import CaseTasks from "./components/CaseTasks";
-import CaseTimeline from "./components/CaseTimeline";
-import CaseAccessForm from "./forms/CaseAccessForm";
-import CaseFileForm from "./forms/CaseFileForm";
-import EditCaseForm from "./forms/EditCaseForm";
+import { ArrowLeft, Plus, Pencil, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Badge, Card, Empty, Modal } from "../../components/ui";
+import { casesService } from "../../services/cases";
+import { financeService } from "../../services/finance";
+import type { Case, Client, Entry, Payment, User } from "../../types";
+import { dateLabel, money } from "../../utils/format";
+import CaseForm from "./forms/CaseForm";
 import EntryForm from "./forms/EntryForm";
-import EventForm from "./forms/EventForm";
-import LinkEventForm from "./forms/LinkEventForm";
 import PaymentForm from "./forms/PaymentForm";
-import RescheduleInstallmentForm from "./forms/RescheduleInstallmentForm";
-import ReversePaymentForm from "./forms/ReversePaymentForm";
-import ServiceForm from "./forms/ServiceForm";
-import TaskForm from "./forms/TaskForm";
-import { useCaseWorkspace } from "./hooks/useCaseWorkspace";
-
+import EntryTable from "./components/EntryTable";
+import CaseAccess from "./components/CaseAccess";
+type Props = {
+  selected: Case;
+  actor: User;
+  users: User[];
+  clients: Client[];
+  back: () => void;
+};
 export default function CaseWorkspace({
   selected,
   actor,
   users,
+  clients,
   back,
-}: {
-  selected: Case;
-  actor: User;
-  users: User[];
-  back: () => void;
-}) {
-  const {
-    isAdmin,
-    authorized,
-    caseData,
-    tasks,
-    canEdit,
-    setModal,
-    error,
-    loading,
-    userName,
-    tab,
-    setTab,
-    setEditEntry,
-    entries,
-    setEditTask,
-    setEditEvent,
-    events,
-    action,
-    caseId,
-    files,
-    openFile,
-    setPlans,
-    setPercent,
-    services,
-    beginPayment,
-    setQuota,
-    setService,
-    setPaymentId,
-    setAllocations,
-    access,
-    modal,
-    done,
-    editEntry,
-    editTask,
-    editEvent,
-    plans,
-    percent,
-    updatePlan,
-    service,
-    allocations,
-    paymentId,
-    quota,
-  } = useCaseWorkspace({ selected, actor, users, back });
-  const responsibleSelect = (value: number = actor.id) => (
-    <ResponsibleSelect
-      value={value}
-      actor={actor}
-      isAdmin={isAdmin}
-      authorized={authorized}
-      users={users}
-      caseData={caseData}
-      tasks={tasks}
-    />
-  );
+}: Props) {
+  const [item, setItem] = useState(selected);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [editEntry, setEditEntry] = useState<Entry>();
+  const [modal, setModal] = useState("");
+  const [remove, setRemove] = useState<Payment>();
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const isAdmin = actor.role === "admin";
+  const canEdit = isAdmin || item.access_level === "edit";
+  async function load() {
+    setBusy(true);
+    setError("");
+    try {
+      const [caseData, acts] = await Promise.all([
+        casesService.get(item.id),
+        casesService.entries(item.id),
+      ]);
+      setItem(caseData);
+      setEntries(acts);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar el caso.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, [item.id]);
+  async function done() {
+    setModal("");
+    setEditEntry(undefined);
+    setRemove(undefined);
+    await load();
+  }
   return (
     <>
-      <button
-        className="link-button mb-5 flex items-center gap-2"
-        onClick={back}
-      >
-        <ArrowLeft size={15} /> Volver a casos
+      <button className="secondary mb-5" onClick={back}>
+        <ArrowLeft size={15} />
+        Volver
       </button>
       <div className="page-head">
         <div>
-          <h1>{caseData.client.name}</h1>
-          <h2>{caseData.subject}</h2>
-          <p className="eyebrow">
-            {caseData.client.code} · {caseData.code}
-          </p>
+          <h1 className="client-title">{item.client.name}</h1>
+          <h2>{item.process_type}</h2>
           <p>
-            {caseData.area} · {caseData.current_stage}
+            {item.client.code} · {item.area} · {item.initial_stage}
           </p>
         </div>
         <div className="actions">
-          <Badge>{caseData.status}</Badge>
           {canEdit && (
             <button className="secondary" onClick={() => setModal("caso")}>
-              <Pencil size={14} />
-              Editar ficha
+              <Pencil size={15} />
+              Editar caso
+            </button>
+          )}
+          {isAdmin && (
+            <button className="secondary" onClick={() => setModal("equipo")}>
+              <Users size={15} />
+              Equipo autorizado
             </button>
           )}
         </div>
@@ -121,200 +92,257 @@ export default function CaseWorkspace({
           {error}
         </p>
       )}
-      {loading && <p className="muted">Actualizando ficha…</p>}
       <Card>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 text-sm">
-          <div>
-            <small>Responsable principal</small>
-            <p className="mt-2 mb-0">{userName(caseData.responsible_id)}</p>
-          </div>
-          <div>
-            <small>Fecha de inicio</small>
-            <p className="mt-2 mb-0">{dateLabel(caseData.start_date)}</p>
-          </div>
-          <div>
-            <small>Expediente o referencia</small>
-            <p className="mt-2 mb-0">
-              {caseData.reference || "Asunto sin expediente"}
-            </p>
-          </div>
-          <div>
-            <small>Tu autorización</small>
-            <p className="mt-2 mb-0">
-              {canEdit ? "Lectura y edición" : "Solo lectura"}
-            </p>
-          </div>
+        <div className="card-head">
+          <h2>Datos del cliente y proceso</h2>
+          <Badge>{item.status === "activo" ? "Activo" : "Concluido"}</Badge>
         </div>
-        <p className="mt-5 mb-0 text-sm muted">{caseData.description}</p>
+        <dl className="details-grid">
+          <div>
+            <dt>Documento</dt>
+            <dd>
+              {item.client.document_type} · {item.client.document_number}
+            </dd>
+          </div>
+          <div>
+            <dt>Celular</dt>
+            <dd>{item.client.phone || "Sin registrar"}</dd>
+          </div>
+          <div>
+            <dt>Correo</dt>
+            <dd>{item.client.email || "Sin registrar"}</dd>
+          </div>
+          <div>
+            <dt>Dirección</dt>
+            <dd>{item.client.address || "Sin registrar"}</dd>
+          </div>
+          <div>
+            <dt>Etapa de ingreso</dt>
+            <dd>{item.initial_stage}</dd>
+          </div>
+          <div>
+            <dt>Abogado responsable</dt>
+            <dd>{item.responsible_name}</dd>
+          </div>
+        </dl>
       </Card>
-      <div className="tabs">
-        {[
-          ["bitacora", "Bitácora"],
-          ["tareas", "Vencimientos"],
-          ["eventos", "Eventos"],
-          ["archivos", "Archivos"],
-          ["servicios", isAdmin ? "Servicios y finanzas" : "Servicios"],
-          ...(isAdmin ? [["permisos", "Autorizaciones"]] : []),
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            className={tab === key ? "active" : ""}
-            onClick={() => setTab(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "bitacora" && (
-        <CaseTimeline
-          canEdit={canEdit}
-          setEditEntry={setEditEntry}
-          setModal={setModal}
+      {isAdmin && (
+        <Card>
+          <div className="card-head">
+            <h2>Control financiero</h2>
+            {item.fee != null && !item.cancelled && (
+              <button className="primary" onClick={() => setModal("pago")}>
+                <Plus size={15} />
+                Registrar abono
+              </button>
+            )}
+            {item.fee == null && (
+              <button className="primary" onClick={() => setModal("caso")}>
+                Registrar honorarios
+              </button>
+            )}
+          </div>
+          {item.fee == null ? (
+            <Empty text="Completa los honorarios y los plazos de pago de este caso." />
+          ) : (
+            <>
+              <div className="finance-summary">
+                <div>
+                  <span>Honorarios pactados</span>
+                  <strong>{money(item.fee)}</strong>
+                </div>
+                <div>
+                  <span>Total abonado</span>
+                  <strong>{money(item.paid)}</strong>
+                </div>
+                <div>
+                  <span>Saldo pendiente</span>
+                  <strong>{money(item.balance)}</strong>
+                  <Badge>
+                    {item.cancelled ? "Cancelado" : "Pendiente de pago"}
+                  </Badge>
+                </div>
+              </div>
+              <h3>Plazos de pago</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cuota</th>
+                      <th>Vencimiento</th>
+                      <th>Importe</th>
+                      <th>Abonado</th>
+                      <th>Saldo</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(item.installments || []).map((quota) => (
+                      <tr key={quota.id}>
+                        <td>Cuota {quota.number}</td>
+                        <td>{dateLabel(quota.due_date)}</td>
+                        <td>{money(quota.amount)}</td>
+                        <td>{money(quota.paid)}</td>
+                        <td>{money(quota.balance)}</td>
+                        <td>
+                          <Badge>
+                            {Number(quota.balance) === 0
+                              ? "Cancelado"
+                              : quota.state === "vencido"
+                                ? "Vencido"
+                                : "Pendiente"}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <h3 className="mt-6">Abonos registrados</h3>
+              {item.payments?.length ? (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Fecha de abono</th>
+                        <th>Importe</th>
+                        <th>Medio de pago</th>
+                        <th>Corrección</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {item.payments.map((payment) => (
+                        <tr key={payment.id}>
+                          <td>{dateLabel(payment.payment_date)}</td>
+                          <td>{money(payment.amount)}</td>
+                          <td>{payment.method || "Sin indicar"}</td>
+                          <td>
+                            <button
+                              className="danger"
+                              onClick={() => setRemove(payment)}
+                            >
+                              Eliminar abono
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <Empty text="Todavía no hay abonos registrados." />
+              )}
+            </>
+          )}
+        </Card>
+      )}
+      <Card>
+        <div className="card-head">
+          <h2>Bitácora del caso</h2>
+          {canEdit && (
+            <button
+              className="primary"
+              onClick={() => {
+                setEditEntry(undefined);
+                setModal("actuacion");
+              }}
+            >
+              <Plus size={15} />
+              Registrar actuación
+            </button>
+          )}
+        </div>
+        <EntryTable
           entries={entries}
-          userName={userName}
-        />
-      )}
-      {tab === "tareas" && (
-        <CaseTasks
+          canAttend={canEdit}
           canEdit={canEdit}
-          setEditTask={setEditTask}
-          setModal={setModal}
-          tasks={tasks}
-          userName={userName}
+          edit={(entry) => {
+            setEditEntry(entry);
+            setModal("actuacion");
+          }}
+          busy={busy}
+          load={load}
         />
-      )}
-      {tab === "eventos" && (
-        <CaseEvents
-          canEdit={canEdit}
-          setEditEvent={setEditEvent}
-          setModal={setModal}
-          events={events}
-          isAdmin={isAdmin}
-          action={action}
-          caseId={caseId}
-        />
-      )}
-      {tab === "archivos" && (
-        <CaseFiles
-          canEdit={canEdit}
-          setModal={setModal}
-          files={files}
-          action={action}
-          openFile={openFile}
-        />
-      )}
-      {tab === "servicios" && (
-        <CaseServices
-          isAdmin={isAdmin}
-          setPlans={setPlans}
-          setPercent={setPercent}
-          setModal={setModal}
-          services={services}
-          beginPayment={beginPayment}
-          setQuota={setQuota}
-          action={action}
-          setService={setService}
-          setPaymentId={setPaymentId}
-          setAllocations={setAllocations}
-        />
-      )}
-      {tab === "permisos" && isAdmin && (
-        <CaseAccess
-          setModal={setModal}
-          access={access}
-          userName={userName}
-          action={action}
-          caseId={caseId}
-        />
-      )}
-
+      </Card>
       {modal && (
         <Modal
           title={
-            {
-              caso: "Editar ficha del caso",
-              actuacion: "Registrar actuación",
-              tarea: "Vencimiento procesal",
-              evento: "Evento concreto",
-              archivo: "Registrar enlace",
-              servicio: "Contratar servicio y definir cuotas",
-              abono: "Registrar abono y confirmar aplicación",
-              credito: "Aplicar crédito disponible",
-              reversar: "Reversar abono",
-              permiso: "Autorizar usuario",
-              reprogramar: "Reprogramar cuota por fecha",
-              vincular: "Vincular acto concreto a cuota",
-            }[modal] || ""
+            modal === "caso"
+              ? "Editar caso"
+              : modal === "pago"
+                ? "Registrar abono"
+                : modal === "equipo"
+                  ? "Equipo autorizado"
+                  : editEntry
+                    ? "Editar actuación"
+                    : "Registrar actuación"
           }
-          close={() => setModal("")}
+          close={() => {
+            setModal("");
+            setEditEntry(undefined);
+          }}
         >
           {modal === "caso" && (
-            <EditCaseForm
-              caseId={caseId}
-              done={done}
-              caseData={caseData}
-              responsibleSelect={responsibleSelect}
+            <CaseForm
+              item={item}
+              actor={actor}
+              users={users}
+              clients={clients}
+              saved={(updated) => {
+                setItem(updated);
+                setModal("");
+              }}
             />
           )}
+          {modal === "pago" && <PaymentForm item={item} done={done} />}
           {modal === "actuacion" && (
-            <EntryForm editEntry={editEntry} caseId={caseId} done={done} />
-          )}
-          {modal === "tarea" && (
-            <TaskForm
-              editTask={editTask}
-              caseId={caseId}
+            <EntryForm
+              caseId={item.id}
+              actor={actor}
+              item={editEntry}
               done={done}
-              responsibleSelect={responsibleSelect}
-              caseData={caseData}
-              entries={entries}
             />
           )}
-          {modal === "evento" && (
-            <EventForm
-              editEvent={editEvent}
-              caseId={caseId}
-              done={done}
-              entries={entries}
-            />
+          {modal === "equipo" && <CaseAccess caseId={item.id} users={users} />}
+        </Modal>
+      )}
+      {remove && (
+        <Modal title="Eliminar abono" close={() => setRemove(undefined)}>
+          <p>
+            Se eliminará el abono de {money(remove.amount)} del{" "}
+            {dateLabel(remove.payment_date)}. El saldo se recalculará.
+          </p>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
           )}
-          {modal === "archivo" && (
-            <CaseFileForm caseId={caseId} done={done} isAdmin={isAdmin} />
-          )}
-          {modal === "permiso" && (
-            <CaseAccessForm caseId={caseId} done={done} users={users} />
-          )}
-          {modal === "servicio" && (
-            <ServiceForm
-              caseId={caseId}
-              plans={plans}
-              percent={percent}
-              done={done}
-              setPercent={setPercent}
-              updatePlan={updatePlan}
-              events={events}
-              setPlans={setPlans}
-            />
-          )}
-          {(modal === "abono" || modal === "credito") && service && (
-            <PaymentForm
-              allocations={allocations}
-              modal={modal}
-              paymentId={paymentId}
-              service={service}
-              done={done}
-              setAllocations={setAllocations}
-            />
-          )}
-          {modal === "vincular" && quota && (
-            <LinkEventForm quota={quota} done={done} events={events} />
-          )}
-          {modal === "reprogramar" && quota && (
-            <RescheduleInstallmentForm quota={quota} done={done} />
-          )}
-          {modal === "reversar" && (
-            <ReversePaymentForm paymentId={paymentId} done={done} />
-          )}
+          <div className="actions">
+            <button className="secondary" onClick={() => setRemove(undefined)}>
+              Conservar abono
+            </button>
+            <button
+              className="danger"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setError("");
+                try {
+                  await financeService.removePayment(remove.id);
+                  await done();
+                } catch (e) {
+                  setError(
+                    e instanceof Error
+                      ? e.message
+                      : "No se pudo eliminar el abono.",
+                  );
+                  setBusy(false);
+                }
+              }}
+            >
+              Eliminar abono
+            </button>
+          </div>
         </Modal>
       )}
     </>
