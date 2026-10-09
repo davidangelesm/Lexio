@@ -1,6 +1,7 @@
 export interface UpcomingPayment {
   id: number;
   case_id: number;
+  case_code: string;
   process_type: string;
   client_code: string;
   client_name: string;

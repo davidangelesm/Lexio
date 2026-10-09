@@ -46,8 +46,10 @@ export default function EntryTable({
             <thead>
               <tr>
                 <th>Actuación</th>
+                <th>Asunto</th>
+                <th>Tipo de asunto</th>
                 <th>Descripción</th>
-                <th>Alerta legal</th>
+                <th>Alerta</th>
                 <th>Responsable / registro</th>
                 <th>Acciones</th>
               </tr>
@@ -58,6 +60,12 @@ export default function EntryTable({
                 return (
                   <tr key={entry.id}>
                     <td>{dateLabel(entry.action_date)}</td>
+                    <td>{entry.subject}</td>
+                    <td>
+                      <Badge>
+                        {entry.subject_type === "legal" ? "Legal" : "Otro"}
+                      </Badge>
+                    </td>
                     <td className="entry-description">{entry.description}</td>
                     <td>
                       {entry.alert_date ? (

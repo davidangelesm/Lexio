@@ -39,6 +39,8 @@ export interface CaseInput {
 }
 export interface EntryInput {
   action_date: string;
+  subject: string;
+  subject_type: "legal" | "otro";
   description: string;
   alert_date: string | null;
 }

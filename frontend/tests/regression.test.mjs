@@ -22,7 +22,7 @@ import EntryForm from "../src/features/cases/forms/EntryForm.tsx";
 import PaymentForm from "../src/features/cases/forms/PaymentForm.tsx";
 import EntryTable from "../src/features/cases/components/EntryTable.tsx";
 import AreaSelect from "../src/features/cases/components/AreaSelect.tsx";
-import AlertTable from "../src/features/alerts/components/AlertTable.tsx";
+import AlertTable from "../src/features/dashboard/components/AlertTable.tsx";
 import Reports from "../src/features/reports/Reports.tsx";
 import AdministrationPage from "../src/features/admin/AdministrationPage.tsx";
 import UserForm from "../src/features/admin/forms/UserForm.tsx";
@@ -146,6 +146,15 @@ function formProps(component, props) {
   render(CaptureForm);
   return form.props;
 }
+function componentTree(component, props) {
+  let tree;
+  function CaptureTree() {
+    tree = component(props);
+    return null;
+  }
+  render(CaptureTree);
+  return tree;
+}
 
 test("login y JWT mantienen credenciales por usuario y token en memoria", async () => {
   const calls = capture({ access_token: "token", user: admin });
@@ -216,7 +225,7 @@ test("al iniciar una sesión la página inicial es el panel", () => {
   render(InitialPage);
   assert.equal(initialPage, "inicio");
 });
-test("panel inicial reúne resumen, alertas y cobros respetando el rol", async () => {
+test("Inicio reúne alertas y cobros con acceso a la pestaña financiera y respeta el rol", async () => {
   const dashboard = {
     counts: {
       total_cases: 4,
@@ -229,6 +238,7 @@ test("panel inicial reúne resumen, alertas y cobros respetando el rol", async (
       {
         id: 1,
         case_id: 7,
+        case_code: "CAS-000007",
         client_code: client.code,
         client_name: client.name,
         process_type: item.process_type,
@@ -239,7 +249,6 @@ test("panel inicial reúne resumen, alertas y cobros respetando el rol", async (
     ],
   };
   const opened = [];
-  const navigated = [];
   const props = {
     actor: admin,
     dashboard,
@@ -247,34 +256,30 @@ test("panel inicial reúne resumen, alertas y cobros respetando el rol", async (
     isAdmin: true,
     busy: false,
     load: noop,
-    openCase: (id) => opened.push(id),
-    setPage: (page) => navigated.push(page),
+    openCase: (id, tab) => opened.push([id, tab]),
   };
   const html = render(DashboardPage, props);
   for (const label of [
     "Panel del día",
-    "Casos activos",
-    "Alertas por revisar",
-    "Saldo por cobrar",
-    "Cobros próximos",
+    "Alertas procesales y otros",
+    "Alerta de cobros",
+    "Cliente y caso",
+    "Saldo de la cuota",
+    "CAS-000007",
   ])
     assert.ok(html.includes(label));
   assert.doesNotMatch(html, /class="eyebrow">[1-4]\s*·/);
   const tree = DashboardPage(props);
-  findButtons(tree, "Ver todas las alertas")[0].props.onClick();
   findButtons(tree, "Ver caso")[0].props.onClick();
-  assert.deepEqual(navigated, ["alertas"]);
-  assert.deepEqual(opened, [7]);
+  assert.equal(findButtons(tree, "Ver todas las alertas").length, 0);
+  assert.deepEqual(opened, [[7, "finanzas"]]);
   const team = render(DashboardPage, {
     ...props,
     actor: staff,
     isAdmin: false,
   });
-  assert.match(team, /Casos concluidos/);
-  assert.doesNotMatch(
-    team,
-    /Saldo por cobrar|Cobros próximos|Honorarios pendientes|9[,.]876/,
-  );
+  assert.match(team, /Alertas procesales y otros/);
+  assert.doesNotMatch(team, /Alerta de cobros|Saldo de la cuota|9[,.]876/);
   const calls = capture(dashboard);
   assert.deepEqual(await dashboardService.get(), dashboard);
   assert.equal(calls[0].url, "https://lexio.test/dashboard");
@@ -292,14 +297,13 @@ test("navegación separa Inicio, Clientes y Casos sin bitácora independiente", 
     "Inicio",
     "Clientes",
     "Casos",
-    "Alertas y vencimientos",
     "Reportes",
     "Administración",
   ])
     assert.ok(html.includes(`title="${label}"`));
   assert.doesNotMatch(
     html,
-    /title="Ficha integral"|title="Bitácora del caso"|1 ·|2 ·|3 ·|4 ·/,
+    /title="Alertas y vencimientos"|title="Ficha integral"|title="Bitácora del caso"|1 ·|2 ·|3 ·|4 ·/,
   );
   assert.doesNotMatch(
     render(AppShell, { ...props, actor: staff }),
@@ -595,14 +599,23 @@ test("detalle destaca primero el cliente y oculta importes al equipo", () => {
     html.indexOf('class="client-title">Ana Torres') <
       html.indexOf("<h2>Cobro de deuda"),
   );
-  assert.match(html, /Registrar abono/);
-  assert.match(html, /Total abonado/);
-  assert.match(html, /Cuota 1/);
   assert.match(html, /Bitácora del caso/);
+  assert.match(html, /role="tab"[^>]*aria-selected="true"[^>]*>Bitácora/);
+  assert.match(html, /id="case-finanzas-panel"[^>]*hidden=""/);
+  const financial = render(CaseWorkspace, { ...props, initialTab: "finanzas" });
+  assert.match(financial, /Registrar abono/);
+  assert.match(financial, /Total abonado/);
+  assert.match(financial, /Cuota 1/);
+  assert.match(financial, /Datos del cliente y proceso/);
+  assert.match(financial, /id="case-bitacora-panel"[^>]*hidden=""/);
   const team = render(CaseWorkspace, { ...props, actor: staff });
   assert.doesNotMatch(
     team,
     /Control financiero|Registrar abono|Eliminar abono/,
+  );
+  assert.doesNotMatch(
+    render(CaseWorkspace, { ...props, actor: staff, initialTab: "finanzas" }),
+    /Control financiero|Registrar abono|Total abonado/,
   );
   assert.doesNotMatch(
     team,
@@ -668,10 +681,12 @@ test("un cliente puede tener varios casos con honorarios propios", async () => {
   assert.equal(second.fee, "2000.00");
   assert.equal("client" in second, false);
 });
-test("bitácora envía fecha, descripción y alerta; responsable viene del usuario autenticado", async () => {
+test("bitácora envía asunto, tipo y descripción detallada con responsable autenticado", async () => {
   const calls = capture({});
   const form = new FormData();
   form.set("action_date", "2026-10-08");
+  form.set("subject", "Presentar escrito");
+  form.set("subject_type", "legal");
   form.set("description", "Presentar escrito");
   form.set("alert_date", "2026-10-15");
   await EntryForm({
@@ -683,12 +698,20 @@ test("bitácora envía fecha, descripción y alerta; responsable viene del usuar
   assert.equal(calls[0].method, "POST");
   assert.deepEqual(JSON.parse(calls[0].body), {
     action_date: "2026-10-08",
+    subject: "Presentar escrito",
+    subject_type: "legal",
     description: "Presentar escrito",
     alert_date: "2026-10-15",
   });
   const html = render(EntryForm, { caseId: 1, actor: staff, done: noop });
   assert.match(html, /Responsable: Abogado/);
   assert.match(html, /se guardan automáticamente/);
+  assert.match(
+    html,
+    /<input(?=[^>]*name="subject")(?=[^>]*maxLength="150")[^>]*>/,
+  );
+  assert.match(html, /name="subject_type"/);
+  assert.match(html, /value="otro">Otro/);
   assert.doesNotMatch(html, /is_payment_event|responsible_id/);
 });
 test("editar actuación precarga sus fechas y texto y conserva el registro original", () => {
@@ -696,6 +719,8 @@ test("editar actuación precarga sus fechas y texto y conserva el registro origi
     id: 7,
     case_id: 1,
     action_date: "2026-10-07",
+    subject: "Escrito original",
+    subject_type: "otro",
     description: "Presentar escrito original",
     alert_date: "2026-10-15",
     attended: true,
@@ -711,6 +736,8 @@ test("editar actuación precarga sus fechas y texto y conserva el registro origi
   });
   assert.match(html, /name="action_date"[^>]*value="2026-10-07"/);
   assert.match(html, /name="alert_date"[^>]*value="2026-10-15"/);
+  assert.match(html, /name="subject"[^>]*value="Escrito original"/);
+  assert.match(html, /value="otro" selected="">Otro/);
   assert.match(
     html,
     /<textarea[^>]*name="description"[^>]*>Presentar escrito original<\/textarea>/,
@@ -719,17 +746,19 @@ test("editar actuación precarga sus fechas y texto y conserva el registro origi
   assert.match(html, /Responsable: Abogado/);
   assert.match(html, /8 de octubre de 2026/);
   assert.match(html, /9:30/);
-  assert.match(html, /ya está atendida/);
+  assert.match(html, /ya está atendido/);
   assert.doesNotMatch(
     html,
     /Responsable: David|name="registered_by"|name="created_at"|name="attended"|type="checkbox"/,
   );
 });
-test("corregir actuación usa PUT y envía solo fecha, descripción y alerta", async () => {
+test("corregir actuación envía asunto y tipo sin alterar autor, hora o Atendido", async () => {
   const entry = {
     id: 7,
     case_id: 1,
     action_date: "2026-10-07",
+    subject: "Escrito original",
+    subject_type: "legal",
     description: "Escrito original",
     alert_date: "2026-10-15",
     attended: true,
@@ -741,6 +770,8 @@ test("corregir actuación usa PUT y envía solo fecha, descripción y alerta", a
   let completed = 0;
   const form = new FormData();
   form.set("action_date", "2026-10-06");
+  form.set("subject", "Asunto corregido");
+  form.set("subject_type", "otro");
   form.set("description", "Descripción corregida");
   form.set("alert_date", "2026-10-20");
   form.set("registered_by", String(admin.id));
@@ -759,6 +790,8 @@ test("corregir actuación usa PUT y envía solo fecha, descripción y alerta", a
   assert.equal(calls[0].method, "PUT");
   assert.deepEqual(JSON.parse(calls[0].body), {
     action_date: "2026-10-06",
+    subject: "Asunto corregido",
+    subject_type: "otro",
     description: "Descripción corregida",
     alert_date: "2026-10-20",
   });
@@ -766,6 +799,8 @@ test("corregir actuación usa PUT y envía solo fecha, descripción y alerta", a
   await EntryForm(props).props.submit(form);
   assert.deepEqual(JSON.parse(calls[1].body), {
     action_date: "2026-10-06",
+    subject: "Asunto corregido",
+    subject_type: "otro",
     description: "Descripción corregida",
     alert_date: null,
   });
@@ -776,6 +811,8 @@ test("editar actuaciones requiere permiso incluso si ya están atendidas", () =>
     id: 7,
     case_id: 1,
     action_date: "2026-10-07",
+    subject: "Escrito breve",
+    subject_type: "legal",
     description: "Escrito",
     alert_date: "2026-10-15",
     attended: false,
@@ -820,6 +857,8 @@ test("bitácora permite atender únicamente obligaciones pendientes con permiso"
     id: 1,
     case_id: 1,
     action_date: "2026-10-08",
+    subject: "Presentar escrito",
+    subject_type: "legal",
     description: "Presentar escrito",
     alert_date: "2026-10-15",
     attended: false,
@@ -837,6 +876,13 @@ test("bitácora permite atender únicamente obligaciones pendientes con permiso"
     openCase: noop,
   };
   assert.match(render(EntryTable, props), /Marcar atendido/);
+  assert.match(
+    render(EntryTable, {
+      ...props,
+      entries: [{ ...entry, subject_type: "otro" }],
+    }),
+    /Marcar atendido/,
+  );
   assert.doesNotMatch(
     render(EntryTable, { ...props, entries: [{ ...entry, attended: true }] }),
     /Marcar atendido/,
@@ -890,14 +936,17 @@ test("abono es simple, automático por defecto y permite elegir primera cuota", 
   assert.equal("installment_id" in JSON.parse(calls[0].body), false);
   assert.equal(JSON.parse(calls[1].body).installment_id, 2);
 });
-test("alertas diferencian leer de atender y cobros no ofrecen atendido", () => {
+test("alertas muestran solo el asunto y permiten atender Legal y Otro con permiso", () => {
   const entry = {
     id: 1,
     case_id: 1,
     client_code: client.code,
     client_name: client.name,
+    case_code: item.code,
+    process_type: item.process_type,
     kind: "legal",
-    description: "Presentar escrito",
+    subject: "Presentar escrito",
+    description: "Detalles extensos reservados a la bitácora",
     target_date: "2026-10-15",
     notice_date: "2026-10-08",
     anticipation: 5,
@@ -908,13 +957,37 @@ test("alertas diferencian leer de atender y cobros no ofrecen atendido", () => {
   };
   const props = {
     data: [entry],
-    isAdmin: false,
     busy: false,
     load: noop,
     openCase: noop,
   };
   assert.match(render(AlertTable, props), /Marcar leído/);
   assert.match(render(AlertTable, props), /Marcar atendido/);
+  assert.match(render(AlertTable, props), /Presentar escrito/);
+  assert.match(render(AlertTable, props), /CAS-000001 · Cobro de deuda/);
+  assert.doesNotMatch(
+    render(AlertTable, props),
+    /Detalles extensos|Saldo de honorarios/,
+  );
+  const opened = [];
+  findButtons(
+    componentTree(AlertTable, {
+      ...props,
+      openCase: (id, tab) => opened.push([id, tab]),
+    }),
+    "Ver caso",
+  )[0].props.onClick();
+  assert.deepEqual(opened, [[1, "bitacora"]]);
+  const other = render(AlertTable, {
+    ...props,
+    data: [{ ...entry, kind: "otro" }],
+  });
+  assert.match(other, />Otro</);
+  assert.match(other, /Marcar atendido/);
+  assert.doesNotMatch(
+    render(AlertTable, { ...props, data: [{ ...entry, can_attend: false }] }),
+    /Marcar atendido/,
+  );
   assert.doesNotMatch(
     render(AlertTable, { ...props, data: [{ ...entry, urgent: true }] }),
     /Marcar leído/,
@@ -926,10 +999,58 @@ test("alertas diferencian leer de atender y cobros no ofrecen atendido", () => {
     }),
     /Marcar atendido|999|<th>Saldo/,
   );
-  assert.match(
-    render(AlertTable, { ...props, isAdmin: true }),
-    /<th>Saldo de honorarios/,
+});
+test("Inicio muestra todas las alertas procesales y excluye cobros de la primera tabla", () => {
+  const alerts = Array.from({ length: 7 }, (_, index) => ({
+    id: index + 1,
+    case_id: item.id,
+    case_code: item.code,
+    process_type: item.process_type,
+    client_code: client.code,
+    client_name: client.name,
+    kind: index % 2 ? "otro" : "legal",
+    subject: `Asunto ${index + 1}`,
+    description: "Detalle reservado",
+    target_date: "2026-10-15",
+    notice_date: "2026-10-08",
+    anticipation: 5,
+    urgent: false,
+    responsible_name: staff.name,
+    entry_id: index + 1,
+    can_attend: true,
+  }));
+  alerts.push({
+    ...alerts[0],
+    id: 8,
+    kind: "pago",
+    subject: "No mezclar cobros",
+  });
+  const html = render(DashboardPage, {
+    actor: staff,
+    dashboard: { counts: {} },
+    alerts,
+    isAdmin: false,
+    busy: false,
+    load: noop,
+    openCase: noop,
+  });
+  for (let index = 1; index <= 7; index++)
+    assert.match(html, new RegExp(`Asunto ${index}`));
+  assert.doesNotMatch(
+    html,
+    /No mezclar cobros|Detalle reservado|Alerta de cobros/,
   );
+  const headers = [...html.matchAll(/<th>([^<]+)<\/th>/g)].map(
+    (match) => match[1],
+  );
+  assert.deepEqual(headers, [
+    "Cliente y caso",
+    "Alerta",
+    "Vencimiento",
+    "Abogado responsable",
+    "Descripción corta",
+    "Acciones",
+  ]);
 });
 test("leer y atender usan endpoints independientes", async () => {
   const calls = capture({});

@@ -1,8 +1,8 @@
-import { Bell, FolderOpen, RefreshCw, Wallet } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Badge, Card, Empty } from "../../components/ui";
-import type { Alert, Dashboard, User } from "../../types";
+import type { Alert, CaseTab, Dashboard, User } from "../../types";
 import { dateLabel, localDate, money } from "../../utils/format";
-import AlertTable from "../alerts/components/AlertTable";
+import AlertTable from "./components/AlertTable";
 type Props = {
   actor: User;
   dashboard?: Dashboard;
@@ -10,8 +10,7 @@ type Props = {
   isAdmin: boolean;
   busy: boolean;
   load: () => Promise<void>;
-  openCase: (id: number) => Promise<void>;
-  setPage: (page: string) => void;
+  openCase: (id: number, tab?: CaseTab) => Promise<void>;
 };
 export default function DashboardPage({
   actor,
@@ -21,7 +20,6 @@ export default function DashboardPage({
   busy,
   load,
   openCase,
-  setPage,
 }: Props) {
   return (
     <>
@@ -44,54 +42,17 @@ export default function DashboardPage({
       </div>
       {dashboard ? (
         <>
-          <div className="dashboard-stats">
-            <Card className="dashboard-stat">
-              <FolderOpen size={21} />
-              <p>Casos activos</p>
-              <strong>{dashboard.counts.active_cases}</strong>
-              <small>{dashboard.counts.total_cases} casos en total</small>
-            </Card>
-            <Card className="dashboard-stat">
-              <Bell size={21} />
-              <p>Alertas por revisar</p>
-              <strong>{alerts.length}</strong>
-              <small>
-                {dashboard.counts.pending_legal_alerts}{" "}
-                {dashboard.counts.pending_legal_alerts === 1
-                  ? "obligación legal pendiente"
-                  : "obligaciones legales pendientes"}
-              </small>
-            </Card>
-            <Card className="dashboard-stat">
-              {isAdmin ? <Wallet size={21} /> : <FolderOpen size={21} />}
-              <p>{isAdmin ? "Saldo por cobrar" : "Casos concluidos"}</p>
-              <strong>
-                {isAdmin
-                  ? money(dashboard.finance?.balance)
-                  : dashboard.counts.concluded_cases}
-              </strong>
-              <small>
-                {isAdmin
-                  ? "Honorarios pendientes de pago"
-                  : "De los casos a los que tienes acceso"}
-              </small>
-            </Card>
-          </div>
           <Card>
             <div className="card-head">
               <div>
-                <h2>Alertas y vencimientos</h2>
+                <h2>Alertas procesales y otros</h2>
                 <p className="muted card-description">
                   Primero los vencimientos más próximos y urgentes.
                 </p>
               </div>
-              <button className="secondary" onClick={() => setPage("alertas")}>
-                Ver todas las alertas
-              </button>
             </div>
             <AlertTable
-              data={alerts.slice(0, 5)}
-              isAdmin={isAdmin}
+              data={alerts.filter((item) => item.kind !== "pago")}
               busy={busy}
               load={load}
               openCase={openCase}
@@ -101,7 +62,7 @@ export default function DashboardPage({
             <Card>
               <div className="card-head">
                 <div>
-                  <h2>Cobros próximos</h2>
+                  <h2>Alerta de cobros</h2>
                   <p className="muted card-description">
                     Cuotas pendientes de los próximos 30 días y cobros vencidos.
                   </p>
@@ -124,8 +85,9 @@ export default function DashboardPage({
                         <tr key={item.id}>
                           <td>
                             <strong>{item.client_name}</strong>
+                            <small>{item.client_code}</small>
                             <small>
-                              {item.client_code} · {item.process_type}
+                              {item.case_code} · {item.process_type}
                             </small>
                           </td>
                           <td>
@@ -146,7 +108,9 @@ export default function DashboardPage({
                             <button
                               className="secondary"
                               disabled={busy}
-                              onClick={() => void openCase(item.case_id)}
+                              onClick={() =>
+                                void openCase(item.case_id, "finanzas")
+                              }
                             >
                               Ver caso
                             </button>

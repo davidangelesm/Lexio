@@ -2,22 +2,15 @@ import { useState } from "react";
 import { Badge, Empty } from "../../../components/ui";
 import { alertsService } from "../../../services/alerts";
 import { casesService } from "../../../services/cases";
-import type { Alert } from "../../../types";
-import { dateLabel, money } from "../../../utils/format";
+import type { Alert, CaseTab } from "../../../types";
+import { dateLabel } from "../../../utils/format";
 type Props = {
   data: Alert[];
-  isAdmin: boolean;
   busy: boolean;
   load: () => Promise<void>;
-  openCase: (id: number) => Promise<void>;
+  openCase: (id: number, tab?: CaseTab) => Promise<void>;
 };
-export default function AlertTable({
-  data,
-  isAdmin,
-  busy,
-  load,
-  openCase,
-}: Props) {
+export default function AlertTable({ data, busy, load, openCase }: Props) {
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
   async function action(item: Alert, attend: boolean) {
@@ -48,11 +41,11 @@ export default function AlertTable({
           <table>
             <thead>
               <tr>
-                <th>Cliente</th>
+                <th>Cliente y caso</th>
                 <th>Alerta</th>
                 <th>Vencimiento</th>
                 <th>Abogado responsable</th>
-                {isAdmin && <th>Saldo de honorarios</th>}
+                <th>Descripción corta</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -62,37 +55,31 @@ export default function AlertTable({
                   <td>
                     <strong>{item.client_name}</strong>
                     <small>{item.client_code}</small>
+                    <small>
+                      {item.case_code} · {item.process_type}
+                    </small>
                   </td>
                   <td>
-                    <Badge>
-                      {item.urgent
-                        ? "Urgente · vencido"
-                        : item.kind === "pago"
-                          ? "Pago"
-                          : "Legal"}
-                    </Badge>
-                    <p className="alert-description">{item.description}</p>
+                    <Badge>{item.kind === "otro" ? "Otro" : "Legal"}</Badge>
                   </td>
                   <td>
                     {dateLabel(item.target_date)}
                     <small>
                       {item.urgent
-                        ? "Requiere atención"
+                        ? "Urgente · vencido"
                         : item.anticipation > 0
                           ? `Aviso de ${item.anticipation} ${item.anticipation === 1 ? "día hábil" : "días hábiles"}`
                           : "Vence hoy"}
                     </small>
                   </td>
                   <td>{item.responsible_name}</td>
-                  {isAdmin && (
-                    <td>{item.balance != null ? money(item.balance) : "—"}</td>
-                  )}
+                  <td className="alert-description">{item.subject}</td>
                   <td>
                     <div className="actions">
                       <button
                         className="secondary"
                         disabled={busy || working}
-                        onClick={() => void openCase(item.case_id)}
+                        onClick={() => void openCase(item.case_id, "bitacora")}
                       >
                         Ver caso
                       </button>
@@ -105,7 +92,7 @@ export default function AlertTable({
                           Marcar leído
                         </button>
                       )}
-                      {item.kind === "legal" &&
+                      {item.kind !== "pago" &&
                         item.can_attend &&
                         item.entry_id && (
                           <button

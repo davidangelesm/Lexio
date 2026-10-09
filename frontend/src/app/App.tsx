@@ -2,7 +2,6 @@ import AppShell from "../components/layout/AppShell";
 import { Modal } from "../components/ui";
 import AdministrationPage from "../features/admin/AdministrationPage";
 import UserForm from "../features/admin/forms/UserForm";
-import AlertsPage from "../features/alerts/AlertsPage";
 import LoginPage from "../features/auth/LoginPage";
 import CasesPage from "../features/cases/CasesPage";
 import CaseWorkspace from "../features/cases/CaseWorkspace";
@@ -39,6 +38,7 @@ export default function App() {
         <CaseWorkspace
           key={selected.id}
           selected={selected}
+          initialTab={state.selectedTab}
           actor={actor}
           users={users}
           clients={clients}
@@ -75,15 +75,6 @@ export default function App() {
               {...state}
               actor={actor}
               create={() => state.newCase()}
-            />
-          )}
-          {page === "alertas" && (
-            <AlertsPage
-              alerts={state.alerts}
-              isAdmin={isAdmin}
-              busy={busy}
-              load={state.load}
-              openCase={state.openCase}
             />
           )}
           {page === "reportes" && (

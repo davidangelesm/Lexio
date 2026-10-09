@@ -10,6 +10,7 @@ import type {
   Alert,
   Audit,
   Case,
+  CaseTab,
   Client,
   Dashboard,
   Report,
@@ -21,6 +22,7 @@ export function useLexio() {
   const request = useRef(0);
   const [page, setPageState] = useState("inicio");
   const [selected, setSelectedState] = useState<Case>();
+  const [selectedTab, setSelectedTab] = useState<CaseTab>("bitacora");
   const [modal, setModalState] = useState("");
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -45,7 +47,10 @@ export function useLexio() {
     if (renderSession === session.current) setPageState(value);
   }
   function setSelected(item?: Case) {
-    if (renderSession === session.current) setSelectedState(item);
+    if (renderSession === session.current) {
+      setSelectedTab("bitacora");
+      setSelectedState(item);
+    }
   }
   function setModal(value: string) {
     if (renderSession === session.current) setModalState(value);
@@ -60,6 +65,7 @@ export function useLexio() {
     setToken("");
     setActorState(undefined);
     setSelectedState(undefined);
+    setSelectedTab("bitacora");
     setCases([]);
     setClients([]);
     setUsers([]);
@@ -102,9 +108,7 @@ export function useLexio() {
           page === "inicio"
             ? dashboardService.get()
             : Promise.resolve(undefined),
-          page === "alertas" || page === "inicio"
-            ? alertsService.list()
-            : Promise.resolve(undefined),
+          page === "inicio" ? alertsService.list() : Promise.resolve(undefined),
           page === "reportes"
             ? reportsService.list()
             : Promise.resolve(undefined),
@@ -133,11 +137,11 @@ export function useLexio() {
     if (actor) void load();
   }, [actor?.id, page]);
   useEffect(() => {
-    if (!actor || !["inicio", "alertas"].includes(page) || selected) return;
+    if (!actor || page !== "inicio" || selected) return;
     const timer = window.setInterval(() => void load(), 60000);
     return () => window.clearInterval(timer);
   }, [actor?.id, page, selected]);
-  async function openCase(id: number) {
+  async function openCase(id: number, tab: CaseTab = "bitacora") {
     if (renderSession !== session.current) return;
     const currentSession = session.current;
     const currentRequest = ++request.current;
@@ -147,7 +151,10 @@ export function useLexio() {
     setError("");
     try {
       const item = await casesService.get(id);
-      if (isCurrent()) setSelected(item);
+      if (isCurrent()) {
+        setSelectedTab(isAdmin ? tab : "bitacora");
+        setSelectedState(item);
+      }
     } catch (e) {
       if (isCurrent())
         setError(e instanceof Error ? e.message : "No se pudo abrir el caso.");
@@ -202,6 +209,7 @@ export function useLexio() {
     page,
     setPage,
     selected,
+    selectedTab,
     setSelected,
     modal,
     setModal,

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Badge, Card, Empty, Modal } from "../../components/ui";
 import { casesService } from "../../services/cases";
 import { financeService } from "../../services/finance";
-import type { Case, Client, Entry, Payment, User } from "../../types";
+import type { Case, CaseTab, Client, Entry, Payment, User } from "../../types";
 import { dateLabel, money } from "../../utils/format";
 import CaseForm from "./forms/CaseForm";
 import EntryForm from "./forms/EntryForm";
@@ -15,6 +15,7 @@ type Props = {
   actor: User;
   users: User[];
   clients: Client[];
+  initialTab?: CaseTab;
   back: () => void;
 };
 export default function CaseWorkspace({
@@ -22,6 +23,7 @@ export default function CaseWorkspace({
   actor,
   users,
   clients,
+  initialTab = "bitacora",
   back,
 }: Props) {
   const [item, setItem] = useState(selected);
@@ -32,6 +34,7 @@ export default function CaseWorkspace({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const isAdmin = actor.role === "admin";
+  const [tab, setTab] = useState<CaseTab>(isAdmin ? initialTab : "bitacora");
   const canEdit = isAdmin || item.access_level === "edit";
   async function load() {
     setBusy(true);
@@ -52,6 +55,9 @@ export default function CaseWorkspace({
   useEffect(() => {
     void load();
   }, [item.id]);
+  useEffect(() => {
+    setTab(isAdmin ? initialTab : "bitacora");
+  }, [initialTab, isAdmin]);
   async function done() {
     setModal("");
     setEditEntry(undefined);
@@ -126,144 +132,206 @@ export default function CaseWorkspace({
           </div>
         </dl>
       </Card>
+      <div
+        className="case-tabs"
+        role="tablist"
+        aria-label="Secciones del caso"
+        onKeyDown={(event) => {
+          if (!isAdmin) return;
+          let next: CaseTab;
+          if (event.key === "ArrowLeft" || event.key === "ArrowRight")
+            next = tab === "bitacora" ? "finanzas" : "bitacora";
+          else if (event.key === "Home") next = "bitacora";
+          else if (event.key === "End") next = "finanzas";
+          else return;
+          event.preventDefault();
+          setTab(next);
+          event.currentTarget
+            .querySelector<HTMLButtonElement>(`[data-tab="${next}"]`)
+            ?.focus();
+        }}
+      >
+        <button
+          className={tab === "bitacora" ? "primary" : "secondary"}
+          role="tab"
+          id="case-bitacora-tab"
+          data-tab="bitacora"
+          aria-selected={tab === "bitacora"}
+          aria-controls="case-bitacora-panel"
+          tabIndex={tab === "bitacora" ? 0 : -1}
+          onClick={() => setTab("bitacora")}
+        >
+          Bitácora
+        </button>
+        {isAdmin && (
+          <button
+            className={tab === "finanzas" ? "primary" : "secondary"}
+            role="tab"
+            id="case-finanzas-tab"
+            data-tab="finanzas"
+            aria-selected={tab === "finanzas"}
+            aria-controls="case-finanzas-panel"
+            tabIndex={tab === "finanzas" ? 0 : -1}
+            onClick={() => setTab("finanzas")}
+          >
+            Control financiero
+          </button>
+        )}
+      </div>
       {isAdmin && (
-        <Card>
-          <div className="card-head">
-            <h2>Control financiero</h2>
-            {item.fee != null && !item.cancelled && (
-              <button className="primary" onClick={() => setModal("pago")}>
-                <Plus size={15} />
-                Registrar abono
-              </button>
-            )}
-            {item.fee == null && (
-              <button className="primary" onClick={() => setModal("caso")}>
-                Registrar honorarios
-              </button>
-            )}
-          </div>
-          {item.fee == null ? (
-            <Empty text="Completa los honorarios y los plazos de pago de este caso." />
-          ) : (
-            <>
-              <div className="finance-summary">
-                <div>
-                  <span>Honorarios pactados</span>
-                  <strong>{money(item.fee)}</strong>
+        <div
+          role="tabpanel"
+          id="case-finanzas-panel"
+          aria-labelledby="case-finanzas-tab"
+          tabIndex={0}
+          hidden={tab !== "finanzas"}
+        >
+          <Card>
+            <div className="card-head">
+              <h2>Control financiero</h2>
+              {item.fee != null && !item.cancelled && (
+                <button className="primary" onClick={() => setModal("pago")}>
+                  <Plus size={15} />
+                  Registrar abono
+                </button>
+              )}
+              {item.fee == null && (
+                <button className="primary" onClick={() => setModal("caso")}>
+                  Registrar honorarios
+                </button>
+              )}
+            </div>
+            {item.fee == null ? (
+              <Empty text="Completa los honorarios y los plazos de pago de este caso." />
+            ) : (
+              <>
+                <div className="finance-summary">
+                  <div>
+                    <span>Honorarios pactados</span>
+                    <strong>{money(item.fee)}</strong>
+                  </div>
+                  <div>
+                    <span>Total abonado</span>
+                    <strong>{money(item.paid)}</strong>
+                  </div>
+                  <div>
+                    <span>Saldo pendiente</span>
+                    <strong>{money(item.balance)}</strong>
+                    <Badge>
+                      {item.cancelled ? "Cancelado" : "Pendiente de pago"}
+                    </Badge>
+                  </div>
                 </div>
-                <div>
-                  <span>Total abonado</span>
-                  <strong>{money(item.paid)}</strong>
-                </div>
-                <div>
-                  <span>Saldo pendiente</span>
-                  <strong>{money(item.balance)}</strong>
-                  <Badge>
-                    {item.cancelled ? "Cancelado" : "Pendiente de pago"}
-                  </Badge>
-                </div>
-              </div>
-              <h3>Plazos de pago</h3>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Cuota</th>
-                      <th>Vencimiento</th>
-                      <th>Importe</th>
-                      <th>Abonado</th>
-                      <th>Saldo</th>
-                      <th>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(item.installments || []).map((quota) => (
-                      <tr key={quota.id}>
-                        <td>Cuota {quota.number}</td>
-                        <td>{dateLabel(quota.due_date)}</td>
-                        <td>{money(quota.amount)}</td>
-                        <td>{money(quota.paid)}</td>
-                        <td>{money(quota.balance)}</td>
-                        <td>
-                          <Badge>
-                            {Number(quota.balance) === 0
-                              ? "Cancelado"
-                              : quota.state === "vencido"
-                                ? "Vencido"
-                                : "Pendiente"}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <h3 className="mt-6">Abonos registrados</h3>
-              {item.payments?.length ? (
+                <h3>Plazos de pago</h3>
                 <div className="table-wrap">
                   <table>
                     <thead>
                       <tr>
-                        <th>Fecha de abono</th>
+                        <th>Cuota</th>
+                        <th>Vencimiento</th>
                         <th>Importe</th>
-                        <th>Medio de pago</th>
-                        <th>Corrección</th>
+                        <th>Abonado</th>
+                        <th>Saldo</th>
+                        <th>Estado</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {item.payments.map((payment) => (
-                        <tr key={payment.id}>
-                          <td>{dateLabel(payment.payment_date)}</td>
-                          <td>{money(payment.amount)}</td>
-                          <td>{payment.method || "Sin indicar"}</td>
+                      {(item.installments || []).map((quota) => (
+                        <tr key={quota.id}>
+                          <td>Cuota {quota.number}</td>
+                          <td>{dateLabel(quota.due_date)}</td>
+                          <td>{money(quota.amount)}</td>
+                          <td>{money(quota.paid)}</td>
+                          <td>{money(quota.balance)}</td>
                           <td>
-                            <button
-                              className="danger"
-                              onClick={() => setRemove(payment)}
-                            >
-                              Eliminar abono
-                            </button>
+                            <Badge>
+                              {Number(quota.balance) === 0
+                                ? "Cancelado"
+                                : quota.state === "vencido"
+                                  ? "Vencido"
+                                  : "Pendiente"}
+                            </Badge>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              ) : (
-                <Empty text="Todavía no hay abonos registrados." />
-              )}
-            </>
-          )}
-        </Card>
-      )}
-      <Card>
-        <div className="card-head">
-          <h2>Bitácora del caso</h2>
-          {canEdit && (
-            <button
-              className="primary"
-              onClick={() => {
-                setEditEntry(undefined);
-                setModal("actuacion");
-              }}
-            >
-              <Plus size={15} />
-              Registrar actuación
-            </button>
-          )}
+                <h3 className="mt-6">Abonos registrados</h3>
+                {item.payments?.length ? (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Fecha de abono</th>
+                          <th>Importe</th>
+                          <th>Medio de pago</th>
+                          <th>Corrección</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {item.payments.map((payment) => (
+                          <tr key={payment.id}>
+                            <td>{dateLabel(payment.payment_date)}</td>
+                            <td>{money(payment.amount)}</td>
+                            <td>{payment.method || "Sin indicar"}</td>
+                            <td>
+                              <button
+                                className="danger"
+                                onClick={() => setRemove(payment)}
+                              >
+                                Eliminar abono
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <Empty text="Todavía no hay abonos registrados." />
+                )}
+              </>
+            )}
+          </Card>
         </div>
-        <EntryTable
-          entries={entries}
-          canAttend={canEdit}
-          canEdit={canEdit}
-          edit={(entry) => {
-            setEditEntry(entry);
-            setModal("actuacion");
-          }}
-          busy={busy}
-          load={load}
-        />
-      </Card>
+      )}
+      <div
+        role="tabpanel"
+        id="case-bitacora-panel"
+        aria-labelledby="case-bitacora-tab"
+        tabIndex={0}
+        hidden={tab !== "bitacora"}
+      >
+        <Card>
+          <div className="card-head">
+            <h2>Bitácora del caso</h2>
+            {canEdit && (
+              <button
+                className="primary"
+                onClick={() => {
+                  setEditEntry(undefined);
+                  setModal("actuacion");
+                }}
+              >
+                <Plus size={15} />
+                Registrar actuación
+              </button>
+            )}
+          </div>
+          <EntryTable
+            entries={entries}
+            canAttend={canEdit}
+            canEdit={canEdit}
+            edit={(entry) => {
+              setEditEntry(entry);
+              setModal("actuacion");
+            }}
+            busy={busy}
+            load={load}
+          />
+        </Card>
+      </div>
       {modal && (
         <Modal
           title={

@@ -1,4 +1,5 @@
 import type { Client } from "./clients";
+export type CaseTab = "bitacora" | "finanzas";
 export interface Installment {
   id: number;
   number: number;
@@ -40,6 +41,8 @@ export interface Entry {
   id: number;
   case_id: number;
   action_date: string;
+  subject: string;
+  subject_type: "legal" | "otro";
   description: string;
   alert_date: string | null;
   attended: boolean;

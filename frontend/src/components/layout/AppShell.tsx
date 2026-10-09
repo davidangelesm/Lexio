@@ -1,5 +1,4 @@
 import {
-  Bell,
   ChartNoAxesCombined,
   ClipboardList,
   LayoutDashboard,
@@ -32,7 +31,6 @@ export default function AppShell({
     { key: "inicio", label: "Inicio", Icon: LayoutDashboard },
     { key: "clientes", label: "Clientes", Icon: Users },
     { key: "casos", label: "Casos", Icon: ClipboardList },
-    { key: "alertas", label: "Alertas y vencimientos", Icon: Bell },
     { key: "reportes", label: "Reportes", Icon: ChartNoAxesCombined },
     ...(isAdmin
       ? [{ key: "usuarios", label: "Administración", Icon: ShieldCheck }]
