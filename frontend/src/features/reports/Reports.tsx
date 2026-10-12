@@ -20,6 +20,7 @@ function metrics(value: ReportTotals, isAdmin: boolean) {
           <td>{money(value.fee)}</td>
           <td>{money(value.paid)}</td>
           <td>{money(value.balance)}</td>
+          <td>{money(value.uncollectible)}</td>
         </>
       )}
     </>
@@ -58,7 +59,8 @@ export default function Reports({ report, isAdmin, busy, load }: Props) {
                     <>
                       <th>Total facturado</th>
                       <th>Efectivo cobrado</th>
-                      <th>Saldo pendiente</th>
+                      <th>Saldo exigible</th>
+                      <th>Saldo incobrable</th>
                     </>
                   )}
                 </tr>
@@ -86,7 +88,9 @@ export default function Reports({ report, isAdmin, busy, load }: Props) {
         )}
         {isAdmin && (
           <p className="muted text-sm mt-5 mb-0">
-            Saldo pendiente = honorarios pactados − abonos registrados.
+            Saldo exigible = honorarios pactados − abonos registrados − saldo
+            incobrable. Las cuotas incobrables conservan su historial y se
+            excluyen de las alertas de cobranza.
           </p>
         )}
       </Card>

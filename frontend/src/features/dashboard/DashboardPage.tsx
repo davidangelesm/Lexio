@@ -82,7 +82,12 @@ export default function DashboardPage({
                     </thead>
                     <tbody>
                       {dashboard.upcoming_payments.map((item) => (
-                        <tr key={item.id}>
+                        <tr
+                          key={item.id}
+                          className={
+                            item.due_date < localDate() ? "alert-urgent" : ""
+                          }
+                        >
                           <td>
                             <strong>{item.client_name}</strong>
                             <small>{item.client_code}</small>
@@ -101,7 +106,7 @@ export default function DashboardPage({
                           <td>
                             <Badge>
                               {item.due_date < localDate()
-                                ? "Vencido"
+                                ? "Urgente · vencido"
                                 : item.due_date === localDate()
                                   ? "Vence hoy"
                                   : "Pendiente"}

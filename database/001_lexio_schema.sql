@@ -156,6 +156,8 @@ CREATE TABLE lexio_installments (
 	due_date DATE NULL,
 	event_name VARCHAR(150) NULL,
 	activated_at DATETIME NULL,
+    uncollectible_reason VARCHAR(500) NULL,
+    uncollectible_at DATETIME NULL,
 	id INTEGER NOT NULL AUTO_INCREMENT, 
 	tenant_id INTEGER NOT NULL, 
 	created_at DATETIME NOT NULL, 

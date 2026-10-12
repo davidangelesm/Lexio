@@ -10,7 +10,7 @@ export default function PaymentForm({ item, done }: Props) {
   const [amount, setAmount] = useState("");
   const [firstQuota, setFirstQuota] = useState("");
   const quotas = (item.installments || []).filter(
-    (quota) => Number(quota.balance) > 0,
+    (quota) => Number(quota.balance) > 0 && !quota.uncollectible_reason,
   );
   const ordered = firstQuota
     ? [
@@ -45,7 +45,7 @@ export default function PaymentForm({ item, done }: Props) {
           name="amount"
           type="number"
           min="0.01"
-          max={item.balance || undefined}
+          max={item.balance ?? undefined}
           step="0.01"
           required
           value={amount}
@@ -91,7 +91,7 @@ export default function PaymentForm({ item, done }: Props) {
                 <span>{money(applications[quota.id])}</span>
               </p>
             ))}
-          <p className="muted">Saldo total pendiente: {money(item.balance)}</p>
+          <p className="muted">Saldo exigible: {money(item.balance)}</p>
         </div>
       )}
     </Form>

@@ -15,6 +15,8 @@ export interface Installment {
   paid: string;
   balance: string;
   state: string;
+  uncollectible_reason?: string | null;
+  uncollectible_at?: string | null;
 }
 export interface Payment {
   id: number;
@@ -41,6 +43,7 @@ export interface Case {
   fee?: string | null;
   paid?: string;
   balance?: string;
+  uncollectible?: string;
   cancelled?: boolean;
   installments?: Installment[];
   payments?: Payment[];

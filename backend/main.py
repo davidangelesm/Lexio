@@ -258,6 +258,9 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
             submitted = {x.id: x for x in plan if x.id is not None}
             for old in current:
                 new = submitted.get(old.id)
+                if old.uncollectible_reason is not None and (new is None or
+                        (old.amount, old.due_date, old.event_name) != (new.amount, new.due_date, new.event_name)):
+                    raise HTTPException(422, "Reactiva la cobranza antes de modificar o retirar una cuota incobrable")
                 if d.paid(db, user, old.id) > d.ZERO and (new is None or
                         (old.amount, old.due_date, old.event_name) != (new.amount, new.due_date, new.event_name)):
                     raise HTTPException(422, "No puedes modificar ni retirar una cuota que ya recibió un abono")
@@ -421,7 +424,7 @@ def attend_entry(key: int, db: Db, user: Actor) -> dict[str, Any]:
                 quota.due_date = d.today()
                 quota.activated_at = m.now()
                 d.audit(db, user, quota, "Activar cuota por evento", previous)
-                if quota.amount > d.paid(db, user, quota.id):
+                if quota.uncollectible_reason is None and quota.amount > d.paid(db, user, quota.id):
                     for recipient in db.scalars(select(m.User).where(m.User.tenant_id == user.tenant_id,
                             m.User.role == "admin", m.User.active.is_(True))):
                         db.add(m.Notice(tenant_id=user.tenant_id, user_id=recipient.id, case_id=row.case_id,
@@ -438,6 +441,24 @@ def case_payments(key: int, db: Db, user: Actor) -> list[dict[str, Any]]:
     return [d.public(x) for x in d.payments(db, user, key)]
 
 
+@app.put("/installments/{key}/collection")
+def update_collection(key: int, data: s.CollectionUpdate, db: Db, user: Actor) -> dict[str, Any]:
+    admin(user)
+    row = d.get(db, m.Installment, key, user)
+    case = d.case_access(db, user, row.case_id, edit=True, lock=True)
+    row = d.get(db, m.Installment, key, user, lock=True)
+    if data.reason is not None and row.amount == d.paid(db, user, row.id):
+        raise HTTPException(422, "Una cuota pagada no puede marcarse incobrable")
+    if data.reason != row.uncollectible_reason:
+        before = d.public(row)
+        row.uncollectible_reason = data.reason
+        row.uncollectible_at = m.now() if data.reason is not None else None
+        d.cancel_notices(db, user, f"payment:{row.id}")
+        d.audit(db, user, row, "Marcar cuota incobrable" if data.reason is not None else "Reactivar cobranza", before)
+        d.save(db)
+    return d.case_view(db, user, case)
+
+
 @app.post("/cases/{key}/payments", status_code=201)
 def create_payment(key: int, data: s.PaymentIn, db: Db, user: Actor) -> dict[str, Any]:
     admin(user)
@@ -445,8 +466,8 @@ def create_payment(key: int, data: s.PaymentIn, db: Db, user: Actor) -> dict[str
     received = sum((x.amount for x in d.payments(db, user, key)), d.ZERO)
     if case.fee is None:
         raise HTTPException(422, "Registra primero los honorarios y las cuotas")
-    if data.amount > case.fee - received:
-        raise HTTPException(422, "El abono supera el saldo pendiente de la ficha")
+    if data.amount > case.fee - received - d.uncollectible_amount(db, user, key):
+        raise HTTPException(422, "El abono supera el saldo exigible del caso")
     row = m.Payment(tenant_id=user.tenant_id, case_id=key, registered_by=user.id, **data.model_dump(exclude={"installment_id"}))
     db.add(row)
     db.flush()
@@ -485,7 +506,7 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
     if user.role == "admin":
         for item in db.scalars(select(m.Installment).where(m.Installment.tenant_id == user.tenant_id, m.Installment.case_id.in_(cases))):
             balance = item.amount - d.paid(db, user, item.id)
-            if balance > d.ZERO and item.due_date is not None:
+            if balance > d.ZERO and item.due_date is not None and item.uncollectible_reason is None:
                 sources[f"payment:{item.id}"] = {
                     "case_id": item.case_id, "kind": "pago", "target_date": item.due_date,
                     "description": f"Cuota {item.number}", "balance": balance,
@@ -494,9 +515,11 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
                     **({"event_name": item.event_name} if item.event_name is not None else {}),
                 }
         for data in sources.values():
+            if data["kind"] == "pago":
+                continue
             case = cases[data["case_id"]]
             received = sum((p.amount for p in d.payments(db, user, case.id)), d.ZERO)
-            data["balance"] = case.fee - received if case.fee is not None else None
+            data["balance"] = case.fee - received - d.uncollectible_amount(db, user, case.id) if case.fee is not None else None
     existing = {x.source_key: x for x in db.scalars(select(m.Notice).where(m.Notice.tenant_id == user.tenant_id, m.Notice.user_id == user.id))}
     if current.weekday() < 5:
         for source, data in sources.items():
@@ -567,7 +590,7 @@ def reports(db: Db, user: Actor) -> dict[str, Any]:
             groups[case.area_id] = {"area_id": case.area_id, "area": d.get(db, m.LegalArea, case.area_id, user).name,
                 "total_cases": 0, "active_cases": 0, "concluded_cases": 0, "withdrawn_cases": 0}
             if user.role == "admin":
-                groups[case.area_id].update({"fee": d.ZERO, "paid": d.ZERO, "balance": d.ZERO})
+                groups[case.area_id].update({"fee": d.ZERO, "paid": d.ZERO, "balance": d.ZERO, "uncollectible": d.ZERO})
         row = groups[case.area_id]
         row["total_cases"] += 1
         row[{"activo": "active_cases", "concluido": "concluded_cases", "retirado": "withdrawn_cases"}[case.status]] += 1
@@ -576,11 +599,13 @@ def reports(db: Db, user: Actor) -> dict[str, Any]:
             fee = case.fee or d.ZERO
             row["fee"] += fee
             row["paid"] += received
-            row["balance"] += fee - received
+            uncollectible = d.uncollectible_amount(db, user, case.id)
+            row["balance"] += fee - received - uncollectible
+            row["uncollectible"] += uncollectible
     fields = ["total_cases", "active_cases", "concluded_cases", "withdrawn_cases"]
     if user.role == "admin":
-        fields += ["fee", "paid", "balance"]
-    totals = {field: sum((r[field] for r in groups.values()), d.ZERO if field in ("fee", "paid", "balance") else 0) for field in fields}
+        fields += ["fee", "paid", "balance", "uncollectible"]
+    totals = {field: sum((r[field] for r in groups.values()), d.ZERO if field in ("fee", "paid", "balance", "uncollectible") else 0) for field in fields}
     return {"rows": sorted(groups.values(), key=lambda x: x["area"]), "totals": totals}
 
 
@@ -599,11 +624,13 @@ def dashboard(db: Db, user: Actor) -> dict[str, Any]:
     if user.role == "admin":
         fee = sum((case.fee or d.ZERO for case in cases.values()), d.ZERO)
         received = sum((p.amount for case in cases.values() for p in d.payments(db, user, case.id)), d.ZERO)
-        result["finance"] = {"fee": fee, "paid": received, "balance": fee - received}
+        uncollectible = sum((d.uncollectible_amount(db, user, case.id) for case in cases.values()), d.ZERO)
+        result["finance"] = {"fee": fee, "paid": received, "balance": fee - received - uncollectible}
         result["upcoming_payments"] = []
         query = select(m.Installment).where(
             m.Installment.tenant_id == user.tenant_id,
             m.Installment.case_id.in_(cases), m.Installment.due_date <= d.today() + timedelta(days=30),
+            m.Installment.uncollectible_reason.is_(None),
         ).order_by(m.Installment.due_date, m.Installment.id)
         for item in db.scalars(query):
             paid = d.paid(db, user, item.id)

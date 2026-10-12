@@ -61,7 +61,7 @@ def test_ficha_bitacora_alertas_abonos_reportes(setup):
     updated = client.get(f"/cases/{case['id']}", headers=headers[0]).json()
     assert [x["paid"] for x in updated["installments"]] == ["500.00", "200.00"]
     report = client.get("/reports", headers=headers[0]).json()
-    assert report["totals"] == {"total_cases": 1, "active_cases": 1, "concluded_cases": 0, "withdrawn_cases": 0, "fee": "1000.00", "paid": "700.00", "balance": "300.00"}
+    assert report["totals"] == {"total_cases": 1, "active_cases": 1, "concluded_cases": 0, "withdrawn_cases": 0, "fee": "1000.00", "paid": "700.00", "balance": "300.00", "uncollectible": "0.00"}
     assert client.put(f"/cases/{case['id']}", headers=headers[0], json={"status": "concluido"}).status_code == 200
     assert client.get("/reports", headers=headers[0]).json()["rows"][0]["concluded_cases"] == 1
     assert client.post(f"/entries/{entry['id']}/attend", headers=headers[1]).status_code == 200

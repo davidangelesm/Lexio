@@ -24,6 +24,7 @@ import ClientForm from "../src/features/clients/forms/ClientForm.tsx";
 import DashboardPage from "../src/features/dashboard/DashboardPage.tsx";
 import EntryForm from "../src/features/cases/forms/EntryForm.tsx";
 import PaymentForm from "../src/features/cases/forms/PaymentForm.tsx";
+import CollectionForm from "../src/features/cases/forms/CollectionForm.tsx";
 import EntryTable from "../src/features/cases/components/EntryTable.tsx";
 import AreaSelect from "../src/features/cases/components/AreaSelect.tsx";
 import AlertTable from "../src/features/dashboard/components/AlertTable.tsx";
@@ -596,7 +597,10 @@ test("caso con abonos bloquea solo la cuota pagada y permite editar la otra", ()
   assert.equal((html.match(/readOnly=""/g) || []).length, 2);
   assert.match(html.match(/<input[^>]*name="fee"[^>]*>/)[0], /min="0.01"/);
   assert.match(html.match(/<input[^>]*name="amount_0"[^>]*>/)[0], /readOnly/);
-  assert.doesNotMatch(html.match(/<input[^>]*name="amount_1"[^>]*>/)[0], /readOnly/);
+  assert.doesNotMatch(
+    html.match(/<input[^>]*name="amount_1"[^>]*>/)[0],
+    /readOnly/,
+  );
   assert.match(html, /name="due_date_0"/);
   assert.match(html, /name="due_date_1"/);
   assert.match(html, /Agregar cuota/);
@@ -613,15 +617,27 @@ test("un evento vinculado sin abonos permite editar importe y modalidad", () => 
     areas,
     item: {
       ...item,
-      installments: [item.installments[0], {
-        ...item.installments[1], number: 4, event_name: "Sentencia",
-        entry_id: 9, activated_at: "2026-10-08T12:00:00Z",
-      }],
+      installments: [
+        item.installments[0],
+        {
+          ...item.installments[1],
+          number: 4,
+          event_name: "Sentencia",
+          entry_id: 9,
+          activated_at: "2026-10-08T12:00:00Z",
+        },
+      ],
     },
     saved: noop,
   });
-  assert.doesNotMatch(html.match(/<input[^>]*name="amount_1"[^>]*>/)[0], /readOnly/);
-  assert.doesNotMatch(html.match(/<input[^>]*name="event_name_1"[^>]*>/)[0], /readOnly/);
+  assert.doesNotMatch(
+    html.match(/<input[^>]*name="amount_1"[^>]*>/)[0],
+    /readOnly/,
+  );
+  assert.doesNotMatch(
+    html.match(/<input[^>]*name="event_name_1"[^>]*>/)[0],
+    /readOnly/,
+  );
   assert.equal((html.match(/<select[^>]*disabled/g) || []).length, 1);
   assert.match(html, /Cuota 4 · importe/);
 });
@@ -1359,6 +1375,174 @@ test("Inicio muestra todas las alertas procesales y excluye cobros de la primera
     "Acciones",
   ]);
 });
+test("anticipaciones de 5, 3 y 1 días se muestran en Inicio antes del vencimiento", () => {
+  const alerts = [5, 3, 1].map((anticipation) => ({
+    id: anticipation,
+    case_id: item.id,
+    case_code: item.code,
+    client_name: client.name,
+    client_code: client.code,
+    process_type: item.process_type,
+    kind: "legal",
+    subject: `Plazo ${anticipation}`,
+    target_date: "2999-10-20",
+    anticipation,
+    urgent: false,
+    responsible_name: admin.name,
+  }));
+  const html = render(DashboardPage, {
+    actor: admin,
+    dashboard: { counts: {}, upcoming_payments: [] },
+    alerts,
+    isAdmin: true,
+    busy: false,
+    load: noop,
+    openCase: noop,
+  });
+  for (const anticipation of [5, 3, 1]) {
+    assert.match(
+      html,
+      new RegExp(
+        `Aviso de ${anticipation} ${anticipation === 1 ? "día hábil" : "días hábiles"}`,
+      ),
+    );
+    assert.match(html, new RegExp(`Plazo ${anticipation}`));
+  }
+  assert.doesNotMatch(html, /alert-urgent|Urgente · vencido/);
+});
+
+test("cobros vencidos usan el mismo rojo y estado urgente que las alertas procesales", () => {
+  const payments = ["2000-01-01", "2999-01-01"].map((due_date, index) => ({
+    id: index + 1,
+    case_id: item.id,
+    case_code: item.code,
+    client_name: client.name,
+    client_code: client.code,
+    process_type: item.process_type,
+    number: index + 1,
+    due_date,
+    balance: "100.00",
+  }));
+  const html = render(DashboardPage, {
+    actor: admin,
+    dashboard: { counts: {}, upcoming_payments: payments },
+    alerts: [],
+    isAdmin: true,
+    busy: false,
+    load: noop,
+    openCase: noop,
+  });
+  const rows = [...html.matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/g)].map(
+    (match) => match[0],
+  );
+  const overdue = rows.find((row) => row.includes("Cuota 1"));
+  const future = rows.find((row) => row.includes("Cuota 2"));
+  assert.match(overdue, /class="alert-urgent"/);
+  assert.match(overdue, /Urgente · vencido/);
+  assert.doesNotMatch(future, /alert-urgent|Urgente/);
+  assert.match(future, /Pendiente/);
+});
+
+test("cuotas incobrables exigen motivo y permiten reactivar cobranza", async () => {
+  const quota = { ...item.installments[0], uncollectible_reason: null };
+  const calls = capture(item);
+  const form = new FormData();
+  form.set("reason", " Cliente no pagará ");
+  await CollectionForm({ quota, done: async () => {} }).props.submit(form);
+  assert.equal(calls[0].url, "https://lexio.test/installments/1/collection");
+  assert.equal(calls[0].method, "PUT");
+  assert.deepEqual(JSON.parse(calls[0].body), { reason: "Cliente no pagará" });
+  form.set("reason", "  ");
+  await assert.rejects(
+    CollectionForm({ quota, done: noop }).props.submit(form),
+    /Indica el motivo/,
+  );
+  assert.equal(calls.length, 1);
+  const marked = {
+    ...quota,
+    state: "incobrable",
+    uncollectible_reason: "Cliente no pagará",
+  };
+  await CollectionForm({ quota: marked, done: async () => {} }).props.submit(
+    form,
+  );
+  assert.deepEqual(JSON.parse(calls[1].body), { reason: null });
+  assert.match(
+    render(CollectionForm, { quota: marked, done: noop }),
+    /Reactivar cobranza|Cliente no pagará/,
+  );
+});
+
+test("incobrables conservan saldo visible solo al administrador y se excluyen de abonos", () => {
+  const marked = {
+    ...item,
+    uncollectible: "100.00",
+    balance: "500.00",
+    installments: [
+      {
+        ...item.installments[0],
+        state: "incobrable",
+        uncollectible_reason: "Sin posibilidad de cobro",
+      },
+      item.installments[1],
+    ],
+  };
+  const html = render(CaseWorkspace, {
+    selected: marked,
+    actor: admin,
+    users: [],
+    clients: [],
+    areas,
+  });
+  assert.match(html, /Incobrable|Reactivar cobranza|Sin posibilidad de cobro/);
+  assert.match(html, /Incobrable excluido/);
+  assert.match(html, /Saldo exigible/);
+  assert.doesNotMatch(html, /Incluye/);
+  const staffHtml = render(CaseWorkspace, {
+    selected: marked,
+    actor: staff,
+    users: [],
+    clients: [],
+    areas,
+  });
+  assert.doesNotMatch(
+    staffHtml,
+    /Incobrable|Reactivar cobranza|Sin posibilidad de cobro/,
+  );
+  const formHtml = render(PaymentForm, { item: marked, done: noop });
+  assert.doesNotMatch(formHtml, /<option value="1"/);
+  assert.match(formHtml, /<option value="2"/);
+  assert.match(formHtml, /max="500.00"/);
+  const allMarked = {
+    ...marked,
+    balance: "0.00",
+    installments: marked.installments.map((q) => ({
+      ...q,
+      uncollectible_reason: "Motivo",
+    })),
+  };
+  assert.doesNotMatch(
+    render(CaseWorkspace, {
+      selected: allMarked,
+      actor: admin,
+      users: [],
+      clients: [],
+      areas,
+    }),
+    /Registrar abono/,
+  );
+  assert.match(
+    render(CaseWorkspace, {
+      selected: allMarked,
+      actor: admin,
+      users: [],
+      clients: [],
+      areas,
+    }),
+    /Sin saldo exigible/,
+  );
+});
+
 test("leer y atender usan endpoints independientes", async () => {
   const calls = capture({});
   await alertsService.read(5);
@@ -1400,11 +1584,15 @@ test("reporte único agrupa casos y financieras por rama respetando roles", asyn
   assert.match(html, /Total facturado/);
   assert.match(html, /Retirados/);
   assert.match(html, /Efectivo cobrado/);
-  assert.match(html, /Saldo pendiente/);
+  assert.match(html, /Saldo exigible/);
+  assert.match(
+    html,
+    /honorarios pactados − abonos registrados − saldo incobrable/,
+  );
   assert.doesNotMatch(html, /Corte|Servicio|cutoff/);
   assert.doesNotMatch(
     render(Reports, { ...props, isAdmin: false }),
-    /Total facturado|Efectivo cobrado|Saldo pendiente/,
+    /Total facturado|Efectivo cobrado|Saldo exigible|Saldo incobrable/,
   );
   const calls = capture(report);
   await reportsService.list();

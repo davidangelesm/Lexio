@@ -30,7 +30,9 @@ export default function CaseForm({
   const isAdmin = actor.role === "admin";
   const quotaLocked = (quota: InstallmentInput) =>
     item?.installments?.some(
-      (original) => original.id === quota.id && cents(original.paid) > 0n,
+      (original) =>
+        original.id === quota.id &&
+        (cents(original.paid) > 0n || !!original.uncollectible_reason),
     ) ?? false;
   const [fee, setFee] = useState(item?.fee || "");
   const [plan, setPlan] = useState<InstallmentInput[]>(

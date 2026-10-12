@@ -130,6 +130,8 @@ class Installment(Entity, Base):
     due_date: Mapped[date | None] = mapped_column(Date)
     event_name: Mapped[str | None] = mapped_column(String(150))
     activated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    uncollectible_reason: Mapped[str | None] = mapped_column(String(500))
+    uncollectible_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class Payment(Entity, Base):

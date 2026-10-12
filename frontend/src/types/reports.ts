@@ -6,6 +6,7 @@ export interface ReportTotals {
   fee?: string;
   paid?: string;
   balance?: string;
+  uncollectible?: string;
 }
 export interface ReportRow extends ReportTotals {
   area_id: number;

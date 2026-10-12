@@ -9,6 +9,7 @@ import type {
   Client,
   Entry,
   LegalArea,
+  Installment,
   Payment,
   User,
 } from "../../types";
@@ -16,6 +17,7 @@ import { dateLabel, money } from "../../utils/format";
 import CaseForm from "./forms/CaseForm";
 import EntryForm from "./forms/EntryForm";
 import PaymentForm from "./forms/PaymentForm";
+import CollectionForm from "./forms/CollectionForm";
 import EntryTable from "./components/EntryTable";
 import CaseAccess from "./components/CaseAccess";
 type Props = {
@@ -41,6 +43,7 @@ export default function CaseWorkspace({
   const [editEntry, setEditEntry] = useState<Entry>();
   const [modal, setModal] = useState("");
   const [remove, setRemove] = useState<Payment>();
+  const [collection, setCollection] = useState<Installment>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const isAdmin = actor.role === "admin";
@@ -72,6 +75,7 @@ export default function CaseWorkspace({
     setModal("");
     setEditEntry(undefined);
     setRemove(undefined);
+    setCollection(undefined);
     await load();
   }
   return (
@@ -220,7 +224,7 @@ export default function CaseWorkspace({
           <Card>
             <div className="card-head">
               <h2>Control financiero</h2>
-              {item.fee != null && !item.cancelled && (
+              {item.fee != null && Number(item.balance) > 0 && (
                 <button className="primary" onClick={() => setModal("pago")}>
                   <Plus size={15} />
                   Registrar abono
@@ -246,10 +250,19 @@ export default function CaseWorkspace({
                     <strong>{money(item.paid)}</strong>
                   </div>
                   <div>
-                    <span>Saldo pendiente</span>
+                    <span>Saldo exigible</span>
                     <strong>{money(item.balance)}</strong>
+                    {Number(item.uncollectible) > 0 && (
+                      <small>
+                        Incobrable excluido: {money(item.uncollectible)}
+                      </small>
+                    )}
                     <Badge>
-                      {item.cancelled ? "Cancelado" : "Pendiente de pago"}
+                      {item.cancelled
+                        ? "Cancelado"
+                        : Number(item.balance) === 0
+                          ? "Sin saldo exigible"
+                          : "Pendiente de pago"}
                     </Badge>
                   </div>
                 </div>
@@ -264,6 +277,7 @@ export default function CaseWorkspace({
                         <th>Abonado</th>
                         <th>Saldo</th>
                         <th>Estado</th>
+                        <th>Cobranza</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -297,12 +311,30 @@ export default function CaseWorkspace({
                             <Badge>
                               {Number(quota.balance) === 0
                                 ? "Cancelado"
-                                : quota.state === "esperando_evento"
-                                  ? "Esperando evento"
-                                  : quota.state === "vencido"
-                                    ? "Vencido"
-                                    : "Pendiente"}
+                                : quota.state === "incobrable"
+                                  ? "Incobrable"
+                                  : quota.state === "esperando_evento"
+                                    ? "Esperando evento"
+                                    : quota.state === "vencido"
+                                      ? "Vencido"
+                                      : "Pendiente"}
                             </Badge>
+                            {quota.uncollectible_reason && (
+                              <small>{quota.uncollectible_reason}</small>
+                            )}
+                          </td>
+                          <td>
+                            {Number(quota.balance) > 0 && (
+                              <button
+                                className="secondary"
+                                disabled={busy}
+                                onClick={() => setCollection(quota)}
+                              >
+                                {quota.uncollectible_reason
+                                  ? "Reactivar cobranza"
+                                  : "Marcar incobrable"}
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -481,6 +513,18 @@ export default function CaseWorkspace({
           {modal === "equipo" && (
             <CaseAccess item={item} users={users} changed={load} />
           )}
+        </Modal>
+      )}
+      {collection && (
+        <Modal
+          title={
+            collection.uncollectible_reason
+              ? "Reactivar cobranza"
+              : "Cuota incobrable"
+          }
+          close={() => setCollection(undefined)}
+        >
+          <CollectionForm quota={collection} done={done} />
         </Modal>
       )}
       {remove && (

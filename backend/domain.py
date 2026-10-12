@@ -142,10 +142,15 @@ def paid(db: Session, user: m.User, installment_id: int) -> Decimal:
 def installment_view(db: Session, user: m.User, item: m.Installment) -> dict[str, Any]:
     applied = paid(db, user, item.id)
     balance = item.amount - applied
-    state = "pagado" if balance == ZERO else "esperando_evento" if item.due_date is None else "vencido" if item.due_date < today() else "parcial" if applied > ZERO else "pendiente"
+    state = "pagado" if balance == ZERO else "incobrable" if item.uncollectible_reason is not None else "esperando_evento" if item.due_date is None else "vencido" if item.due_date < today() else "parcial" if applied > ZERO else "pendiente"
     entry_id = db.scalar(select(m.Entry.id).where(m.Entry.tenant_id == user.tenant_id,
         m.Entry.case_id == item.case_id, m.Entry.payment_installment_id == item.id))
     return {**public(item), "paid": applied, "balance": balance, "state": state, "entry_id": entry_id}
+
+
+def uncollectible_amount(db: Session, user: m.User, case_id: int) -> Decimal:
+    return sum((x.amount - paid(db, user, x.id) for x in installments(db, user, case_id)
+        if x.uncollectible_reason is not None), ZERO)
 
 
 def case_view(db: Session, user: m.User, item: m.Case) -> dict[str, Any]:
@@ -159,11 +164,14 @@ def case_view(db: Session, user: m.User, item: m.Case) -> dict[str, Any]:
     if user.role == "admin":
         received = payments(db, user, item.id)
         total = sum((p.amount for p in received), ZERO)
+        plan = [installment_view(db, user, x) for x in installments(db, user, item.id)]
+        uncollectible = sum((x["balance"] for x in plan if x["uncollectible_reason"] is not None), ZERO)
         data.update({
             "fee": item.fee, "paid": total,
-            "balance": item.fee - total if item.fee is not None else None,
+            "balance": item.fee - total - uncollectible if item.fee is not None else None,
             "cancelled": item.fee is not None and item.fee == total,
-            "installments": [installment_view(db, user, x) for x in installments(db, user, item.id)],
+            "uncollectible": uncollectible,
+            "installments": plan,
             "payments": [public(p) for p in received],
         })
     return data
@@ -221,9 +229,12 @@ def allocate_payment(db: Session, user: m.User, payment: m.Payment, first: int |
         chosen = next((x for x in plan if x.id == first), None)
         if chosen is None:
             raise HTTPException(422, "La cuota debe pertenecer a esta ficha")
+        if chosen.uncollectible_reason is not None:
+            raise HTTPException(422, "Reactiva la cobranza de la cuota antes de registrar un abono")
         if chosen.amount == paid(db, user, chosen.id):
             raise HTTPException(422, "La cuota seleccionada ya está pagada")
         plan = [chosen, *(x for x in plan if x.id != first)]
+    plan = [x for x in plan if x.uncollectible_reason is None]
     remaining = payment.amount
     for item in plan:
         amount = min(remaining, item.amount - paid(db, user, item.id))

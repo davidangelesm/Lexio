@@ -13,7 +13,7 @@ La ficha integral define los datos del sistema. Se registran en vistas separadas
 
 Las alertas se consultan en Inicio; se retiró la página separada de Alertas y vencimientos. Los avisos se anticipan 5, 3 y 1 días hábiles (lunes a viernes, sin feriados) y cada asunto muestra solo su aviso más reciente, conservando la fecha límite original. Leer descarta ese recordatorio hasta el siguiente; Atendido completa asuntos Legal y Otro con permiso de edición. Un vencimiento pendiente pasa a urgente después de su fecha. Los cobros se resuelven al pagar la cuota. Corregir asunto, tipo o descripción conserva los avisos leídos.
 
-Cada caso tiene un único total de honorarios y cuotas por fecha. Las cuotas suman el total pactado. Registrar un abono lo aplica automáticamente a la primera cuota pendiente y después a las siguientes por número; opcionalmente se puede elegir otra cuota inicial. No hay créditos separados, servicios, eventos de pago ni confirmaciones adicionales. El saldo es honorarios menos abonos; concluir un caso conserva la deuda.
+Cada caso tiene un único total de honorarios y cuotas por fecha. Las cuotas suman el total pactado. Registrar un abono lo aplica automáticamente a la primera cuota pendiente y después a las siguientes por número; opcionalmente se puede elegir otra cuota inicial. No hay créditos separados, servicios, eventos de pago ni confirmaciones adicionales. El saldo exigible es honorarios menos abonos e importes pendientes marcados incobrables; concluir un caso conserva la deuda.
 
 En la vista de un caso activo, **Concluir caso** permite cerrar su atención con una confirmación breve. Está disponible para quienes tienen permiso de edición; conserva el historial y los avisos y cobros pendientes. El cierre usa el estado y la auditoría existentes, sin una migración adicional.
 
@@ -30,6 +30,8 @@ Un asistente con permiso de alta puede consultar su cliente recién registrado p
 Todas las tablas tienen `tenant_id`. El servidor obtiene el estudio del JWT validado y verifica usuario activo y relaciones del mismo estudio. El frontend nunca envía el estudio para establecer identidad ni recibe credenciales de MySQL. El JWT permanece en memoria; cerrar o recargar exige iniciar sesión.
 
 ## Actualización desde el modelo anterior
+
+Para gestionar cuotas incobrables, revisar y aplicar [007_uncollectible_installments.sql](database/007_uncollectible_installments.sql) antes de desplegar el backend compatible. Conserva los registros existentes; no se aplicó desde esta revisión. Ver [reglas de cobranza y saldo](database/UNCOLLECTIBLE_INSTALLMENTS.md). El administrador puede marcar una cuota con motivo y reactivarla; el saldo incobrable se conserva, se distingue en reportes y se excluye de avisos y nuevos abonos.
 
 Para añadir asunto y tipo a la bitácora del esquema actual, usar la [migración aditiva](backend/MIGRATION_ENTRY_SUBJECTS.md). Está preparada y pendiente de revisión humana; no se aplicó a MySQL. Conserva los registros y debe aplicarse explícitamente antes del backend compatible. El procedimiento de reemplazo de datos de prueba que sigue corresponde a la transición anterior.
 

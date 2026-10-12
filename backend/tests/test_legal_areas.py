@@ -98,7 +98,7 @@ def test_new_and_renamed_catalog_names_appear_in_cases_filters_and_reports(setup
     report = client.get("/reports", headers=headers[0]).json()
     assert report["rows"] == [{"area_id": branch_id, "area": "Derecho marítimo y portuario",
         "total_cases": 2, "active_cases": 1, "concluded_cases": 1, "withdrawn_cases": 0,
-        "fee": "2000.00", "paid": "0.00", "balance": "2000.00"}]
+        "fee": "2000.00", "paid": "0.00", "balance": "2000.00", "uncollectible": "0.00"}]
     changed = client.put(f"/cases/{case['id']}", headers=headers[0], json={"area_id": other_id})
     assert changed.status_code == 200 and changed.json()["area"] == "Derecho aduanero"
     assert changed.json()["area_id"] == other_id
