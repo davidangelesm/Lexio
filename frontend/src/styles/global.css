@@ -512,12 +512,12 @@
   .plan-row {
     display: grid;
     gap: 10px;
-    grid-template-columns: 1fr 1fr auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     background: #f5f8f5;
     padding: 15px;
     margin-bottom: 12px;
     border-radius: 8px;
-    align-items: end;
+    align-items: start;
   }
   .payment-preview {
     background: #f4f8f5;

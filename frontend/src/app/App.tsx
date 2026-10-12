@@ -2,6 +2,7 @@ import AppShell from "../components/layout/AppShell";
 import { Modal } from "../components/ui";
 import AdministrationPage from "../features/admin/AdministrationPage";
 import UserForm from "../features/admin/forms/UserForm";
+import LegalAreaForm from "../features/admin/forms/LegalAreaForm";
 import LoginPage from "../features/auth/LoginPage";
 import CasesPage from "../features/cases/CasesPage";
 import CaseWorkspace from "../features/cases/CaseWorkspace";
@@ -98,14 +99,15 @@ export default function App() {
                 ? state.editClient
                   ? "Corregir datos del cliente"
                   : "Nuevo cliente"
-                : "Cuenta del equipo"
+                : modal === "rama"
+                  ? "Agregar rama de derecho"
+                  : "Cuenta del equipo"
           }
           close={() => state.setModal("")}
         >
           {modal === "caso" && (
             <CaseForm
               actor={actor}
-              users={users}
               clients={clients}
               areas={state.areas}
               clientId={state.newCaseClientId}
@@ -122,6 +124,7 @@ export default function App() {
           {modal === "usuario" && (
             <UserForm editUser={state.editUser} done={state.done} />
           )}
+          {modal === "rama" && isAdmin && <LegalAreaForm done={state.done} />}
         </Modal>
       )}
     </AppShell>

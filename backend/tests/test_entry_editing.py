@@ -16,7 +16,7 @@ def entry_data(**changes):
 
 def new_entry(setup, **changes):
     client, headers, ids, _ = setup
-    case = create(setup, responsible_id=ids[1])
+    case = create(setup, team_member_id=ids[1])
     response = client.post(f"/cases/{case['id']}/entries", headers=headers[1], json=entry_data(**changes))
     assert response.status_code == 201, response.text
     return case, response.json()

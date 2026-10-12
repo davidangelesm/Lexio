@@ -1,24 +1,79 @@
 import { useEffect, useState } from "react";
 import { Field, Form } from "../../../components/ui";
 import { casesService } from "../../../services/cases";
-import type { Access, User } from "../../../types";
+import type { Access, Case, User } from "../../../types";
 import { str } from "../../../utils/form";
-type Props = { caseId: number; users: User[] };
-export default function CaseAccess({ caseId, users }: Props) {
+
+export function availableAssistants(users: User[], access: Access[]): User[] {
+  return users.filter(
+    (user) =>
+      user.active &&
+      user.role === "staff" &&
+      !access.some((member) => member.user_id === user.id),
+  );
+}
+
+type Props = { item: Case; users: User[]; changed: () => Promise<void> };
+export default function CaseAccess({ item, users, changed }: Props) {
   const [access, setAccess] = useState<Access[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const available = availableAssistants(users, access);
+  const administrators = users.filter(
+    (user) => user.role === "admin" && user.active,
+  );
+  const assistants = access.filter(
+    (member) =>
+      !users.some(
+        (user) => user.id === member.user_id && user.role === "admin",
+      ),
+  );
   async function load() {
-    setAccess(await casesService.access(caseId));
+    try {
+      setAccess(await casesService.access(item.id));
+      setLoaded(true);
+    } catch (e) {
+      setLoaded(false);
+      throw e;
+    }
   }
   useEffect(() => {
-    void load().catch((e) =>
-      setError(e instanceof Error ? e.message : "No se pudo cargar el equipo."),
-    );
-  }, [caseId]);
+    setLoading(true);
+    void load()
+      .catch((e) =>
+        setError(
+          e instanceof Error ? e.message : "No se pudo cargar el equipo.",
+        ),
+      )
+      .finally(() => setLoading(false));
+  }, [item.id]);
+  async function changePermission(member: Access, level?: string) {
+    setBusy(true);
+    setError("");
+    try {
+      if (level)
+        await casesService.saveAccess(item.id, {
+          user_id: member.user_id,
+          level,
+        });
+      else await casesService.removeAccess(item.id, member.user_id);
+      await load();
+      await changed();
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "No se pudo actualizar el equipo.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <>
       <p className="muted text-sm">
-        Autoriza quién puede consultar o registrar actuaciones en este caso.
+        El administrador es el responsable del caso y tiene acceso permanente.
+        Los asistentes lo apoyan según los permisos que les otorgues.
       </p>
       {error && (
         <p className="error" role="alert">
@@ -35,82 +90,101 @@ export default function CaseAccess({ caseId, users }: Props) {
             </tr>
           </thead>
           <tbody>
-            {access.map((item) => {
-              const isAdmin = users.some(
-                (user) => user.id === item.user_id && user.role === "admin",
-              );
-              return (
-                <tr key={item.id}>
-                  <td>{item.user_name}</td>
-                  <td>
-                    {isAdmin
-                      ? "Administrador"
-                      : item.level === "edit"
-                        ? "Consultar y editar"
-                        : "Solo consultar"}
-                  </td>
-                  <td>
-                    {isAdmin ? (
-                      <span className="muted">Acceso permanente</span>
-                    ) : (
-                      <button
-                        className="danger"
-                        onClick={async () => {
-                          setError("");
-                          try {
-                            await casesService.removeAccess(
-                              caseId,
-                              item.user_id,
-                            );
-                            await load();
-                          } catch (e) {
-                            setError(
-                              e instanceof Error
-                                ? e.message
-                                : "No se pudo retirar el permiso.",
-                            );
-                          }
-                        }}
-                      >
-                        Retirar acceso
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {administrators.map((user) => (
+              <tr key={`admin-${user.id}`}>
+                <td>
+                  {user.name}
+                  <small>Responsable del caso</small>
+                </td>
+                <td>Administrador</td>
+                <td>
+                  <span className="muted">Acceso permanente</span>
+                </td>
+              </tr>
+            ))}
+            {assistants.map((member) => (
+              <tr key={member.id}>
+                <td>
+                  {member.user_name}
+                  <small>Asistente</small>
+                </td>
+                <td>
+                  <select
+                    aria-label={`Permiso de ${member.user_name}`}
+                    value={member.level}
+                    disabled={busy || loading}
+                    onChange={(event) =>
+                      void changePermission(member, event.target.value)
+                    }
+                  >
+                    <option value="edit">Consultar y editar</option>
+                    <option value="read">Solo consultar</option>
+                  </select>
+                </td>
+                <td>
+                  <button
+                    className="danger"
+                    disabled={busy || loading}
+                    onClick={() => void changePermission(member)}
+                  >
+                    Retirar acceso
+                  </button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
-      <Form
-        label="Guardar permiso"
-        submit={async (form) => {
-          await casesService.saveAccess(caseId, {
-            user_id: Number(str(form, "user_id")),
-            level: str(form, "level"),
-          });
-          await load();
-        }}
-      >
-        <Field label="Usuario">
-          <select name="user_id" defaultValue="" required>
-            <option value="">Selecciona un usuario</option>
-            {users
-              .filter((user) => user.active && user.role !== "admin")
-              .map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-          </select>
-        </Field>
-        <Field label="Permiso">
-          <select name="level">
-            <option value="edit">Consultar y editar</option>
-            <option value="read">Solo consultar</option>
-          </select>
-        </Field>
-      </Form>
+      <div className="rounded-lg border border-[#e0e7e2] bg-[#f8faf9] p-4">
+        <h3>Agregar asistente</h3>
+        {loading ? (
+          <p className="muted mb-0 text-sm">Cargando equipo…</p>
+        ) : !loaded ? (
+          <p className="muted mb-0 text-sm">
+            Vuelve a abrir el equipo para cargar los asistentes disponibles.
+          </p>
+        ) : available.length === 0 ? (
+          <p className="muted mb-0 text-sm">
+            No hay asistentes disponibles para agregar.
+          </p>
+        ) : (
+          <Form
+            key={available.map((user) => user.id).join(",")}
+            label="Agregar al equipo"
+            submit={async (form) => {
+              if (busy) return;
+              setBusy(true);
+              try {
+                await casesService.saveAccess(item.id, {
+                  user_id: Number(str(form, "user_id")),
+                  level: str(form, "level"),
+                });
+                await load();
+                await changed();
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Field label="Asistente">
+              <select name="user_id" defaultValue="" required disabled={busy}>
+                <option value="">Selecciona un asistente</option>
+                {available.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Permiso">
+              <select name="level" disabled={busy}>
+                <option value="edit">Consultar y editar</option>
+                <option value="read">Solo consultar</option>
+              </select>
+            </Field>
+          </Form>
+        )}
+      </div>
     </>
   );
 }

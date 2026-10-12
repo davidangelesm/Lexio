@@ -8,7 +8,6 @@ import { localDate, money } from "../../../utils/format";
 import AreaSelect from "../components/AreaSelect";
 type Props = {
   actor: User;
-  users: User[];
   clients: Client[];
   areas: LegalArea[];
   item?: Case;
@@ -22,7 +21,6 @@ const cents = (value: string) => {
 };
 export default function CaseForm({
   actor,
-  users,
   clients,
   areas,
   item,
@@ -31,6 +29,8 @@ export default function CaseForm({
 }: Props) {
   const isAdmin = actor.role === "admin";
   const hasPayments = !!item?.payments?.length;
+  const planLocked =
+    hasPayments || !!item?.installments?.some((quota) => quota.entry_id);
   const [fee, setFee] = useState(item?.fee || "");
   const [plan, setPlan] = useState<InstallmentInput[]>(
     item?.installments?.length
@@ -38,6 +38,7 @@ export default function CaseForm({
           id: quota.id,
           amount: quota.amount,
           due_date: quota.due_date,
+          ...(quota.event_name != null ? { event_name: quota.event_name } : {}),
         }))
       : [{ amount: item?.fee || "", due_date: localDate() }],
   );
@@ -70,11 +71,16 @@ export default function CaseForm({
           status: str(form, "status") as CaseInput["status"],
         };
         if (isAdmin) {
-          data.responsible_id = Number(str(form, "responsible_id"));
           const installments = plan.map((quota, index) => ({
             ...quota,
             amount: str(form, `amount_${index}`),
-            due_date: str(form, `due_date_${index}`),
+            due_date:
+              quota.event_name != null
+                ? quota.due_date
+                : str(form, `due_date_${index}`),
+            ...(quota.event_name != null
+              ? { event_name: str(form, `event_name_${index}`).trim() }
+              : {}),
           }));
           const total = installments.reduce(
             (sum, quota) => sum + cents(quota.amount),
@@ -85,7 +91,7 @@ export default function CaseForm({
             throw new Error(
               "La suma de las cuotas debe ser igual a los honorarios.",
             );
-          if (!hasPayments) data.fee = honorarios;
+          data.fee = honorarios;
           data.installments = installments;
         }
         if (item) saved(await casesService.update(item.id, data));
@@ -155,64 +161,50 @@ export default function CaseForm({
         <select name="status" defaultValue={item?.status || "activo"}>
           <option value="activo">Activo</option>
           <option value="concluido">Concluido</option>
+          <option value="retirado">Retirado</option>
         </select>
       </Field>
-      {isAdmin && (
-        <div className="full">
-          <Field label="Abogado responsable">
-            <select
-              name="responsible_id"
-              defaultValue={item?.responsible_id || actor.id}
-            >
-              {users
-                .filter(
-                  (user) => user.active || user.id === item?.responsible_id,
-                )
-                .map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-            </select>
-          </Field>
-        </div>
-      )}
       {isAdmin && (
         <>
           <div className="full form-section">
             <h3>Control financiero</h3>
             <p>
-              Indica el total pactado y las fechas de vencimiento de sus cuotas.
+              Indica el total pactado y si cada cuota se paga por fecha o al
+              cumplir un evento.
             </p>
           </div>
           <Field label="Honorarios totales S/">
             <input
               name="fee"
               type="number"
-              min="0.01"
+              min={planLocked ? (item?.fee ?? "0.01") : "0.01"}
               step="0.01"
               required
               value={fee}
-              readOnly={hasPayments}
               onChange={(event) => {
                 const value = event.target.value;
                 setFee(value);
-                if (plan.length === 1) changeQuota(0, { amount: value });
+                if (plan.length === 1 && !planLocked)
+                  changeQuota(0, { amount: value });
               }}
             />
           </Field>
           <p className="muted self-center">
             Total de cuotas: {money(Number(planTotal) / 100)}
           </p>
-          {hasPayments && (
+          {planLocked && (
             <p className="full notice">
-              Ya hay abonos registrados. Puedes cambiar los vencimientos; los
-              honorarios y montos se conservan.
+              Puedes ampliar los honorarios y agregar cuotas al final. Las
+              cuotas existentes conservan sus importes y eventos; puedes
+              corregir las fechas de cuotas por fecha.
             </p>
           )}
           <div className="full">
             {plan.map((quota, index) => (
-              <div className="plan-row" key={quota.id || index}>
+              <div
+                className="plan-row"
+                key={quota.id != null ? `saved-${quota.id}` : `new-${index}`}
+              >
                 <Field label={`Cuota ${index + 1} · importe S/`}>
                   <input
                     name={`amount_${index}`}
@@ -221,24 +213,62 @@ export default function CaseForm({
                     step="0.01"
                     required
                     value={quota.amount}
-                    readOnly={hasPayments}
+                    readOnly={planLocked && quota.id != null}
                     onChange={(event) =>
                       changeQuota(index, { amount: event.target.value })
                     }
                   />
                 </Field>
-                <Field label="Fecha de vencimiento">
-                  <input
-                    name={`due_date_${index}`}
-                    type="date"
-                    required
-                    value={quota.due_date}
+                <Field label="Se paga por">
+                  <select
+                    value={quota.event_name != null ? "evento" : "fecha"}
+                    disabled={planLocked && quota.id != null}
                     onChange={(event) =>
-                      changeQuota(index, { due_date: event.target.value })
+                      changeQuota(
+                        index,
+                        event.target.value === "evento"
+                          ? { event_name: "", due_date: null }
+                          : { event_name: undefined, due_date: localDate() },
+                      )
                     }
-                  />
+                  >
+                    <option value="fecha">Fecha</option>
+                    <option value="evento">Evento / hito</option>
+                  </select>
                 </Field>
-                {!hasPayments && plan.length > 1 && (
+                {quota.event_name != null ? (
+                  <Field label="Evento que activa el pago">
+                    <input
+                      name={`event_name_${index}`}
+                      required
+                      maxLength={150}
+                      value={quota.event_name}
+                      readOnly={planLocked && quota.id != null}
+                      placeholder="Ej. Sentencia favorable"
+                      onChange={(event) =>
+                        changeQuota(index, { event_name: event.target.value })
+                      }
+                    />
+                    <small>
+                      {quota.due_date
+                        ? `Activado: ${quota.due_date}`
+                        : "Vincula una actuación en Bitácora. Se cobra al marcarla como atendida."}
+                    </small>
+                  </Field>
+                ) : (
+                  <Field label="Fecha de vencimiento">
+                    <input
+                      name={`due_date_${index}`}
+                      type="date"
+                      required
+                      value={quota.due_date || ""}
+                      onChange={(event) =>
+                        changeQuota(index, { due_date: event.target.value })
+                      }
+                    />
+                  </Field>
+                )}
+                {(!planLocked || quota.id == null) && plan.length > 1 && (
                   <button
                     className="secondary"
                     type="button"
@@ -253,20 +283,18 @@ export default function CaseForm({
                 )}
               </div>
             ))}
-            {!hasPayments && (
-              <button
-                className="secondary"
-                type="button"
-                onClick={() =>
-                  setPlan((current) => [
-                    ...current,
-                    { amount: "", due_date: localDate() },
-                  ])
-                }
-              >
-                Agregar cuota
-              </button>
-            )}
+            <button
+              className="secondary"
+              type="button"
+              onClick={() =>
+                setPlan((current) => [
+                  ...current,
+                  { amount: "", due_date: localDate() },
+                ])
+              }
+            >
+              Agregar cuota
+            </button>
           </div>
         </>
       )}

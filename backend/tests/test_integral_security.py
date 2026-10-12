@@ -80,7 +80,7 @@ def test_staff_can_register_operational_ficha_and_admin_completes_finances(setup
     response = client.post("/cases", headers=headers[1], json=data)
     assert response.status_code == 201, response.text
     case = response.json()
-    assert case["responsible_id"] == ids[1] and "fee" not in case
+    assert case["responsible_id"] == ids[0] and "fee" not in case
     admin_case = client.get(f"/cases/{case['id']}", headers=headers[0]).json()
     assert admin_case["fee"] is None and admin_case["balance"] is None
     complete = client.put(f"/cases/{case['id']}", headers=headers[0], json={"fee": "1000.00", "installments": ficha()["installments"]})
@@ -88,19 +88,43 @@ def test_staff_can_register_operational_ficha_and_admin_completes_finances(setup
     assert client.post(f"/cases/{case['id']}/entries", headers=headers[1], json={"action_date": "2026-10-08", "subject": "Acto", "description": "Acto", "registered_by": ids[0]}).status_code == 422
 
 
-def test_reassigning_responsible_promotes_read_access(setup):
+def test_assistants_cannot_become_responsible_and_keep_support_permissions(setup):
     client, headers, ids, _ = setup
     case = create(setup)
     client.post(f"/cases/{case['id']}/access", headers=headers[0], json={"user_id": ids[1], "level": "read"})
     assert client.get(f"/cases/{case['id']}", headers=headers[1]).json()["access_level"] == "read"
     response = client.put(f"/cases/{case['id']}", headers=headers[0], json={"responsible_id": ids[1]})
-    assert response.status_code == 200
-    assert client.get(f"/cases/{case['id']}", headers=headers[1]).json()["access_level"] == "edit"
+    assert response.status_code == 422
+    assert client.get(f"/cases/{case['id']}", headers=headers[0]).json()["responsible_id"] == ids[0]
+    assert client.get(f"/cases/{case['id']}", headers=headers[1]).json()["access_level"] == "read"
+    assert client.post("/cases", headers=headers[0], json=ficha(document="77777777", responsible_id=ids[1])).status_code == 422
+
+
+def test_revoke_legacy_assistant_responsible_corrects_case_and_preserves_history(setup):
+    client, headers, ids, engine = setup
+    case = create(setup, team_member_id=ids[1])
+    path = f"/cases/{case['id']}"
+    entry = client.post(f"{path}/entries", headers=headers[1], json={
+        "action_date": "2026-10-08", "subject": "Actuación del asistente",
+        "description": "Historial que debe conservarse", "alert_date": "2026-10-15",
+    }).json()
+    # Simula un caso registrado con la regla anterior.
+    with Session(engine) as db:
+        db.get(m.Case, case["id"]).responsible_id = ids[1]
+        db.commit()
+    assert client.delete(f"{path}/access/{ids[1]}", headers=headers[0]).status_code == 200
+    assert client.get(path, headers=headers[1]).status_code == 404
+    assert client.get("/clients", headers=headers[1]).json() == []
+    assert client.get("/alerts", headers=headers[1]).json() == []
+    assert client.get(path, headers=headers[0]).json()["responsible_id"] == ids[0]
+    entries = client.get(f"{path}/entries", headers=headers[0]).json()
+    assert entries[0]["id"] == entry["id"] and entries[0]["registered_by"] == ids[1]
+    assert {row["user_id"] for row in client.get(f"{path}/access", headers=headers[0]).json()} == {ids[0]}
 
 
 def test_notifications_are_private_and_attended_hides_every_recipient(setup):
     client, headers, ids, engine = setup
-    case = create(setup, responsible_id=ids[1])
+    case = create(setup, team_member_id=ids[1])
     entry = client.post(f"/cases/{case['id']}/entries", headers=headers[1], json={"action_date": "2026-10-08", "subject": "Acto", "description": "Acto", "alert_date": "2026-10-15"}).json()
     admin_alert = next(x for x in client.get("/alerts", headers=headers[0]).json() if x["kind"] == "legal")
     staff_alert = client.get("/alerts", headers=headers[1]).json()[0]
@@ -143,7 +167,7 @@ def test_staff_standalone_client_then_case_preserves_visibility_and_revocation(s
     assert created.status_code == 201, created.text
     case = created.json()
     assert case["client"]["id"] == own_client["id"] and "fee" not in case
-    assert case["responsible_id"] == ids[1]
+    assert case["responsible_id"] == ids[0]
     assert [x["id"] for x in client.get("/clients", headers=headers[1]).json()] == [own_client["id"]]
     assert client.get("/clients", headers=colleague_header).json() == []
     # La auditoría de creación no puede recuperar acceso después de una revocación.

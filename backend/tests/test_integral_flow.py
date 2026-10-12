@@ -19,8 +19,13 @@ def ficha(document="12345678", **changes):
 
 def create(setup, **changes):
     client, headers, _, _ = setup
+    member_id = changes.pop("team_member_id", None)
     result = client.post("/cases", headers=headers[0], json=ficha(**changes))
     assert result.status_code == 201, result.text
+    if member_id is not None:
+        grant = client.post(f"/cases/{result.json()['id']}/access", headers=headers[0],
+            json={"user_id": member_id, "level": "edit"})
+        assert grant.status_code == 200, grant.text
     return result.json()
 
 
@@ -35,7 +40,7 @@ def abono(client, header, case, amount, **changes):
 
 def test_ficha_bitacora_alertas_abonos_reportes(setup):
     client, headers, ids, _ = setup
-    case = create(setup, responsible_id=ids[1])
+    case = create(setup, team_member_id=ids[1])
     assert case["client"]["code"] == "CL-000001"
     assert case["initial_stage"] == "Demanda"
     assert case["paid"] == "0.00" and case["balance"] == "1000.00"
@@ -56,7 +61,7 @@ def test_ficha_bitacora_alertas_abonos_reportes(setup):
     updated = client.get(f"/cases/{case['id']}", headers=headers[0]).json()
     assert [x["paid"] for x in updated["installments"]] == ["500.00", "200.00"]
     report = client.get("/reports", headers=headers[0]).json()
-    assert report["totals"] == {"total_cases": 1, "active_cases": 1, "concluded_cases": 0, "fee": "1000.00", "paid": "700.00", "balance": "300.00"}
+    assert report["totals"] == {"total_cases": 1, "active_cases": 1, "concluded_cases": 0, "withdrawn_cases": 0, "fee": "1000.00", "paid": "700.00", "balance": "300.00"}
     assert client.put(f"/cases/{case['id']}", headers=headers[0], json={"status": "concluido"}).status_code == 200
     assert client.get("/reports", headers=headers[0]).json()["rows"][0]["concluded_cases"] == 1
     assert client.post(f"/entries/{entry['id']}/attend", headers=headers[1]).status_code == 200

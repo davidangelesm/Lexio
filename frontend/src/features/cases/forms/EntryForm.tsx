@@ -1,6 +1,6 @@
 import { Field, Form } from "../../../components/ui";
 import { casesService } from "../../../services/cases";
-import type { Entry, User } from "../../../types";
+import type { Entry, Installment, User } from "../../../types";
 import type { EntryInput } from "../../../types/requests";
 import { str } from "../../../utils/form";
 import { dateTimeLabels, localDate } from "../../../utils/format";
@@ -8,10 +8,23 @@ type Props = {
   caseId: number;
   actor: User;
   item?: Entry;
+  installments?: Installment[];
   done: () => Promise<void>;
 };
-export default function EntryForm({ caseId, actor, item, done }: Props) {
+export default function EntryForm({
+  caseId,
+  actor,
+  item,
+  installments = [],
+  done,
+}: Props) {
   const registered = item && dateTimeLabels(item.created_at);
+  const events = installments.filter(
+    (quota) =>
+      quota.event_name &&
+      (!quota.entry_id || quota.entry_id === item?.id) &&
+      (!quota.activated_at || quota.id === item?.payment_installment_id),
+  );
   return (
     <Form
       label={item ? "Guardar cambios" : "Registrar actuación"}
@@ -23,6 +36,14 @@ export default function EntryForm({ caseId, actor, item, done }: Props) {
           description: str(form, "description"),
           alert_date: str(form, "alert_date") || null,
         };
+        if (
+          actor.role === "admin" &&
+          (events.length || item?.payment_installment_id)
+        ) {
+          data.payment_installment_id = item?.attended
+            ? (item.payment_installment_id ?? null)
+            : Number(str(form, "payment_installment_id")) || null;
+        }
         if (item) await casesService.updateEntry(item.id, data);
         else await casesService.addEntry(caseId, data);
         await done();
@@ -73,6 +94,28 @@ export default function EntryForm({ caseId, actor, item, done }: Props) {
           />
         </Field>
       </div>
+      {actor.role === "admin" && events.length > 0 && (
+        <div className="full rounded-lg border border-[#e0e7e2] bg-[#f8faf9] p-4">
+          <Field label="Cláusula de pago que activa esta actuación (opcional)">
+            <select
+              name="payment_installment_id"
+              defaultValue={item?.payment_installment_id || ""}
+              disabled={item?.attended}
+            >
+              <option value="">No activa una cuota</option>
+              {events.map((quota) => (
+                <option key={quota.id} value={quota.id}>
+                  Cuota {quota.number} · {quota.event_name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <p className="muted mt-2 mb-0 text-xs">
+            Al marcar esta actuación como atendida, la cuota será exigible ese
+            mismo día y aparecerá en cobranza.
+          </p>
+        </div>
+      )}
       {item && registered ? (
         <p className="full notice">
           Responsable: {item.responsible_name}.

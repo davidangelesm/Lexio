@@ -28,6 +28,54 @@ def test_legal_area_catalog_requires_auth_and_is_tenant_scoped(setup):
     assert not {row["id"] for row in own} & {row["id"] for row in foreign}
 
 
+def test_admin_creates_area_in_authenticated_tenant_with_audit_and_case_usage(setup):
+    client, headers, ids, engine = setup
+    response = client.post("/legal-areas", headers=headers[0], json={"name": "  Derecho marítimo  "})
+    assert response.status_code == 201
+    area = response.json()
+    assert set(area) == {"id", "name"}
+    assert area["name"] == "Derecho marítimo"
+    assert area in client.get("/legal-areas", headers=headers[1]).json()
+    assert area not in client.get("/legal-areas", headers=headers[2]).json()
+    with Session(engine) as db:
+        row = db.get(m.LegalArea, area["id"])
+        user = db.get(m.User, ids[0])
+        assert row.tenant_id == user.tenant_id
+        audit = db.scalar(select(m.Audit).where(m.Audit.resource == "lexio_legal_areas"))
+        assert audit.resource_id == row.id
+        assert audit.user_id == user.id and audit.tenant_id == user.tenant_id
+        assert audit.action == "Agregar rama de derecho"
+    assert create(setup, area_id=area["id"])["area"] == area["name"]
+
+
+def test_area_creation_requires_admin_and_rejects_frontend_tenant(setup):
+    client, headers, _, engine = setup
+    assert client.post("/legal-areas", json={"name": "Penal"}).status_code == 401
+    assert client.post("/legal-areas", headers=headers[1], json={"name": "Penal"}).status_code == 403
+    assert client.post("/legal-areas", headers=headers[0], json={"name": "Penal", "tenant_id": 2}).status_code == 422
+    with Session(engine) as db:
+        assert db.scalar(select(func.count(m.LegalArea.id))) == 4
+        assert db.scalar(select(func.count(m.Audit.id))) == 0
+
+
+@pytest.mark.parametrize("name", ["", "   ", "x" * 81, None])
+def test_area_creation_validates_name(setup, name):
+    client, headers, _, _ = setup
+    assert client.post("/legal-areas", headers=headers[0], json={"name": name}).status_code == 422
+
+
+def test_duplicate_area_is_rejected_without_audit_and_other_tenant_can_use_same_name(setup):
+    client, headers, _, engine = setup
+    assert client.post("/legal-areas", headers=headers[0], json={"name": "Penal"}).status_code == 201
+    response = client.post("/legal-areas", headers=headers[0], json={"name": "  Penal  "})
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Ya existe una rama de derecho con ese nombre en el estudio"
+    assert client.post("/legal-areas", headers=headers[2], json={"name": "Penal"}).status_code == 201
+    with Session(engine) as db:
+        assert db.scalar(select(func.count(m.LegalArea.id))) == 6
+        assert db.scalar(select(func.count(m.Audit.id))) == 2
+
+
 def test_new_and_renamed_catalog_names_appear_in_cases_filters_and_reports(setup):
     client, headers, ids, engine = setup
     branch_id = add_area(engine, ids[0], "Derecho marítimo")
@@ -49,7 +97,7 @@ def test_new_and_renamed_catalog_names_appear_in_cases_filters_and_reports(setup
     assert all(row["area"] == "Derecho marítimo y portuario" for row in client.get("/cases", headers=headers[0]).json())
     report = client.get("/reports", headers=headers[0]).json()
     assert report["rows"] == [{"area_id": branch_id, "area": "Derecho marítimo y portuario",
-        "total_cases": 2, "active_cases": 1, "concluded_cases": 1,
+        "total_cases": 2, "active_cases": 1, "concluded_cases": 1, "withdrawn_cases": 0,
         "fee": "2000.00", "paid": "0.00", "balance": "2000.00"}]
     changed = client.put(f"/cases/{case['id']}", headers=headers[0], json={"area_id": other_id})
     assert changed.status_code == 200 and changed.json()["area"] == "Derecho aduanero"

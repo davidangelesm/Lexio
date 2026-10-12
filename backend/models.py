@@ -68,7 +68,7 @@ class Case(Entity, Base):
         UniqueConstraint("tenant_id", "id"), ref("client_id", "clients"), ref("responsible_id", "users"),
         ForeignKeyConstraint(["tenant_id", "area_id"], ["lexio_legal_areas.tenant_id", "lexio_legal_areas.id"],
             name="fk_case_legal_area", ondelete="RESTRICT"),
-        CheckConstraint("status IN ('activo', 'concluido')", name="ck_case_status"),
+        CheckConstraint("status IN ('activo', 'concluido', 'retirado')", name="ck_case_status"),
         CheckConstraint("fee IS NULL OR fee > 0", name="ck_case_fee"),
     )
     client_id: Mapped[int] = mapped_column(Integer)
@@ -97,6 +97,10 @@ class Entry(Entity, Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "id"), ref("case_id", "cases"), ref("registered_by", "users"),
         CheckConstraint("subject_type IN ('legal', 'otro')", name="ck_entry_subject_type"),
+        UniqueConstraint("tenant_id", "payment_installment_id", name="uq_entry_payment_installment"),
+        ForeignKeyConstraint(["tenant_id", "case_id", "payment_installment_id"],
+            ["lexio_installments.tenant_id", "lexio_installments.case_id", "lexio_installments.id"],
+            name="fk_entry_payment_installment", ondelete="RESTRICT"),
     )
     case_id: Mapped[int] = mapped_column(Integer)
     action_date: Mapped[date] = mapped_column(Date)
@@ -106,6 +110,7 @@ class Entry(Entity, Base):
     alert_date: Mapped[date | None] = mapped_column(Date)
     attended: Mapped[bool] = mapped_column(default=False)
     registered_by: Mapped[int] = mapped_column(Integer)
+    payment_installment_id: Mapped[int | None] = mapped_column(Integer)
 
 
 class Installment(Entity, Base):
@@ -113,11 +118,18 @@ class Installment(Entity, Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "id"), UniqueConstraint("tenant_id", "case_id", "number"),
         ref("case_id", "cases"), CheckConstraint("amount > 0", name="ck_installment_amount"),
+        UniqueConstraint("tenant_id", "case_id", "id", name="uq_installment_tenant_case_id"),
+        CheckConstraint("(event_name IS NULL AND due_date IS NOT NULL AND activated_at IS NULL) OR "
+            "(event_name IS NOT NULL AND length(trim(event_name)) > 0 AND "
+            "((activated_at IS NULL AND due_date IS NULL) OR (activated_at IS NOT NULL AND due_date IS NOT NULL)))",
+            name="ck_installment_trigger"),
     )
     case_id: Mapped[int] = mapped_column(Integer)
     number: Mapped[int] = mapped_column(Integer)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
-    due_date: Mapped[date] = mapped_column(Date)
+    due_date: Mapped[date | None] = mapped_column(Date)
+    event_name: Mapped[str | None] = mapped_column(String(150))
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class Payment(Entity, Base):

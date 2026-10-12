@@ -33,6 +33,13 @@ No ejecutar la migración `004` sobre ese esquema nuevo.
 
 ## Consultar, agregar y corregir ramas
 
+El administrador puede agregar ramas desde **Administración → Ramas de derecho
+→ Agregar rama**. La API guarda el nombre en `lexio_legal_areas`, obtiene el
+estudio del usuario autenticado y registra la creación en el historial. Al
+guardar, se recarga el catálogo para usarlo en Casos. Se rechazan nombres vacíos,
+de más de 80 caracteres o ya registrados en el mismo estudio. No requiere
+cambios de esquema.
+
 Primero identificar el estudio real:
 
 ```sql

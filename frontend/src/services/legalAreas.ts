@@ -5,4 +5,7 @@ export const legalAreasService = {
   list(): Promise<LegalArea[]> {
     return api<LegalArea[]>("/legal-areas");
   },
+  create(name: string): Promise<LegalArea> {
+    return api<LegalArea>("/legal-areas", "POST", { name });
+  },
 };

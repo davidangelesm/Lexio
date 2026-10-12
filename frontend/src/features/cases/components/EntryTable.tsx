@@ -66,7 +66,17 @@ export default function EntryTable({
                         {entry.subject_type === "legal" ? "Legal" : "Otro"}
                       </Badge>
                     </td>
-                    <td className="entry-description">{entry.description}</td>
+                    <td className="entry-description">
+                      {entry.description}
+                      {entry.payment_event && (
+                        <small>
+                          Pago por evento: {entry.payment_event} ·{" "}
+                          {entry.payment_activated
+                            ? "Cobranza activada"
+                            : "Se activa al atender"}
+                        </small>
+                      )}
+                    </td>
                     <td>
                       {entry.alert_date ? (
                         <>
@@ -78,7 +88,18 @@ export default function EntryTable({
                           </small>
                         </>
                       ) : (
-                        "Sin alerta"
+                        <>
+                          Sin alerta
+                          {(entry.can_attend ||
+                            entry.payment_installment_id ||
+                            entry.attended) && (
+                            <small>
+                              <Badge>
+                                {entry.attended ? "Atendido" : "Pendiente"}
+                              </Badge>
+                            </small>
+                          )}
+                        </>
                       )}
                     </td>
                     <td>
@@ -97,7 +118,9 @@ export default function EntryTable({
                             Editar
                           </button>
                         )}
-                        {entry.alert_date &&
+                        {(entry.alert_date ||
+                          entry.can_attend ||
+                          entry.payment_installment_id) &&
                           !entry.attended &&
                           (canAttend ?? entry.can_attend) && (
                             <button

@@ -24,15 +24,15 @@ export interface ClientInput {
 export interface InstallmentInput {
   id?: number;
   amount: string;
-  due_date: string;
+  due_date: string | null;
+  event_name?: string | null;
 }
 export interface CaseInput {
   client_id: number;
   area_id: number;
   process_type: string;
   initial_stage: string;
-  status: "activo" | "concluido";
-  responsible_id?: number;
+  status: "activo" | "concluido" | "retirado";
   fee?: string;
   installments?: InstallmentInput[];
 }
@@ -42,6 +42,7 @@ export interface EntryInput {
   subject_type: "legal" | "otro";
   description: string;
   alert_date: string | null;
+  payment_installment_id?: number | null;
 }
 export interface PaymentInput {
   payment_date: string;

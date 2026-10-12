@@ -101,7 +101,7 @@ CREATE TABLE lexio_cases (
 	FOREIGN KEY(tenant_id, client_id) REFERENCES lexio_clients (tenant_id, id), 
 	FOREIGN KEY(tenant_id, responsible_id) REFERENCES lexio_users (tenant_id, id), 
 	CONSTRAINT fk_case_legal_area FOREIGN KEY(tenant_id, area_id) REFERENCES lexio_legal_areas (tenant_id, id) ON DELETE RESTRICT,
-	CONSTRAINT ck_case_status CHECK (status IN ('activo', 'concluido')), 
+	CONSTRAINT ck_case_status CHECK (status IN ('activo', 'concluido', 'retirado')), 
 	CONSTRAINT ck_case_fee CHECK (fee IS NULL OR fee > 0), 
 	FOREIGN KEY(tenant_id) REFERENCES lexio_tenants (tenant_id)
 )ENGINE=InnoDB CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -135,6 +135,7 @@ CREATE TABLE lexio_entries (
 	alert_date DATE, 
 	attended BOOL NOT NULL, 
 	registered_by INTEGER NOT NULL, 
+	payment_installment_id INTEGER NULL,
 	id INTEGER NOT NULL AUTO_INCREMENT, 
 	tenant_id INTEGER NOT NULL, 
 	created_at DATETIME NOT NULL, 
@@ -152,19 +153,35 @@ CREATE TABLE lexio_installments (
 	case_id INTEGER NOT NULL, 
 	number INTEGER NOT NULL, 
 	amount NUMERIC(14, 2) NOT NULL, 
-	due_date DATE NOT NULL, 
+	due_date DATE NULL,
+	event_name VARCHAR(150) NULL,
+	activated_at DATETIME NULL,
 	id INTEGER NOT NULL AUTO_INCREMENT, 
 	tenant_id INTEGER NOT NULL, 
 	created_at DATETIME NOT NULL, 
 	PRIMARY KEY (id), 
 	UNIQUE (tenant_id, id), 
 	UNIQUE (tenant_id, case_id, number), 
+	CONSTRAINT uq_installment_tenant_case_id UNIQUE (tenant_id, case_id, id),
+	CONSTRAINT ck_installment_trigger CHECK (
+        (event_name IS NULL AND due_date IS NOT NULL AND activated_at IS NULL)
+        OR (event_name IS NOT NULL AND LENGTH(TRIM(event_name)) > 0 AND (
+            (activated_at IS NULL AND due_date IS NULL)
+            OR (activated_at IS NOT NULL AND due_date IS NOT NULL)
+        ))
+    ),
 	FOREIGN KEY(tenant_id, case_id) REFERENCES lexio_cases (tenant_id, id), 
 	CONSTRAINT ck_installment_amount CHECK (amount > 0), 
 	FOREIGN KEY(tenant_id) REFERENCES lexio_tenants (tenant_id)
 )ENGINE=InnoDB CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE INDEX ix_lexio_installments_tenant_id ON lexio_installments (tenant_id);
+
+ALTER TABLE lexio_entries
+    ADD CONSTRAINT uq_entry_payment_installment UNIQUE (tenant_id, payment_installment_id),
+    ADD CONSTRAINT fk_entry_payment_installment
+        FOREIGN KEY (tenant_id, case_id, payment_installment_id)
+        REFERENCES lexio_installments (tenant_id, case_id, id) ON DELETE RESTRICT;
 
 CREATE TABLE lexio_notices (
 	user_id INTEGER NOT NULL, 

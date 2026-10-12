@@ -14,6 +14,7 @@ function metrics(value: ReportTotals, isAdmin: boolean) {
       <td>{value.total_cases}</td>
       <td>{value.active_cases}</td>
       <td>{value.concluded_cases}</td>
+      <td>{value.withdrawn_cases}</td>
       {isAdmin && (
         <>
           <td>{money(value.fee)}</td>
@@ -52,6 +53,7 @@ export default function Reports({ report, isAdmin, busy, load }: Props) {
                   <th>Total casos</th>
                   <th>Activos</th>
                   <th>Concluidos</th>
+                  <th>Retirados</th>
                   {isAdmin && (
                     <>
                       <th>Total facturado</th>

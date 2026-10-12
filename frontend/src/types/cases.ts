@@ -8,7 +8,10 @@ export interface Installment {
   id: number;
   number: number;
   amount: string;
-  due_date: string;
+  due_date: string | null;
+  event_name?: string | null;
+  activated_at?: string | null;
+  entry_id?: number | null;
   paid: string;
   balance: string;
   state: string;
@@ -30,7 +33,7 @@ export interface Case {
   area: string;
   process_type: string;
   initial_stage: string;
-  status: "activo" | "concluido";
+  status: "activo" | "concluido" | "retirado";
   responsible_id: number;
   responsible_name: string;
   created_at: string;
@@ -58,4 +61,7 @@ export interface Entry {
   client_name: string;
   process_type: string;
   can_attend?: boolean;
+  payment_installment_id?: number | null;
+  payment_event?: string;
+  payment_activated?: boolean;
 }

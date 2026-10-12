@@ -37,7 +37,7 @@ def entry_alerts(client, header):
 
 def test_alert_identifies_case_and_responsible_while_bitacora_keeps_author(setup):
     client, headers, ids, _ = setup
-    case = create(setup, responsible_id=ids[1])
+    case = create(setup, team_member_id=ids[1])
     data = entry_data(subject="Presentar apelación", description="Adjuntar fundamentos y medios de prueba.")
     response = client.post(f"/cases/{case['id']}/entries", headers=headers[0], json=data)
     assert response.status_code == 201, response.text
@@ -46,7 +46,7 @@ def test_alert_identifies_case_and_responsible_while_bitacora_keeps_author(setup
     assert entry["subject_type"] == "legal" and entry["registered_by"] == ids[0]
     assert entry["responsible_name"] == "David"
     alert = entry_alerts(client, headers[1])[0]
-    assert alert["subject"] == data["subject"] and alert["responsible_name"] == "Abogado"
+    assert alert["subject"] == data["subject"] and alert["responsible_name"] == "David"
     assert alert["case_code"] == case["code"] and alert["process_type"] == case["process_type"]
     assert alert["client_code"] == case["client"]["code"] and alert["client_name"] == case["client"]["name"]
     assert "balance" not in alert and "tenant_id" not in alert
@@ -54,7 +54,7 @@ def test_alert_identifies_case_and_responsible_while_bitacora_keeps_author(setup
 
 def test_other_alert_read_next_reminder_urgent_and_attend(setup, monkeypatch):
     client, headers, ids, engine = setup
-    case = create(setup, responsible_id=ids[1])
+    case = create(setup, team_member_id=ids[1])
     entry = client.post(f"/cases/{case['id']}/entries", headers=headers[1],
         json=entry_data(subject="Enviar documentos", subject_type="otro")).json()
     assert entry["can_attend"] is True
@@ -82,7 +82,7 @@ def test_other_alert_read_next_reminder_urgent_and_attend(setup, monkeypatch):
 
 def test_subject_and_type_edits_preserve_read_notices_and_next_reminder(setup, monkeypatch):
     client, headers, ids, engine = setup
-    case = create(setup, responsible_id=ids[1])
+    case = create(setup, team_member_id=ids[1])
     original = client.post(f"/cases/{case['id']}/entries", headers=headers[1], json=entry_data()).json()
     admin_notice = entry_alerts(client, headers[0])[0]
     staff_notice = entry_alerts(client, headers[1])[0]

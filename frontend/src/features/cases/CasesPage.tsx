@@ -98,6 +98,7 @@ export default function CasesPage({
               <option value="">Todos</option>
               <option value="activo">Activo</option>
               <option value="concluido">Concluido</option>
+              <option value="retirado">Retirado</option>
             </select>
           </Field>
           <div className="actions">
@@ -142,7 +143,13 @@ export default function CasesPage({
                     <td>{item.area}</td>
                     <td>
                       <Badge>
-                        {item.status === "activo" ? "Activo" : "Concluido"}
+                        {
+                          {
+                            activo: "Activo",
+                            concluido: "Concluido",
+                            retirado: "Retirado",
+                          }[item.status]
+                        }
                       </Badge>
                     </td>
                     <td>{item.responsible_name}</td>

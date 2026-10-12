@@ -7,6 +7,7 @@ export interface UpcomingPayment {
   client_name: string;
   number: number;
   due_date: string;
+  event_name?: string;
   amount: string;
   paid: string;
   balance: string;

@@ -61,7 +61,7 @@ export default function AppShell({
         </nav>
         <div className="profile">
           <strong>{actor.name}</strong>
-          <small>{isAdmin ? "Administrador" : "Equipo jurídico"}</small>
+          <small>{isAdmin ? "Administrador" : "Asistente"}</small>
           <br />
           <button className="secondary" onClick={onLogout}>
             <LogOut size={15} />

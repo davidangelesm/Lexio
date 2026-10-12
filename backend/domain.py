@@ -42,6 +42,25 @@ def get(db: Session, model: type[T], key: int, user: m.User, lock: bool = False)
     return item
 
 
+def case_responsible(db: Session, user: m.User) -> m.User:
+    if user.role == "admin":
+        return user
+    responsible = db.scalar(select(m.User).where(
+        m.User.tenant_id == user.tenant_id, m.User.role == "admin", m.User.active.is_(True),
+    ).order_by(m.User.id).limit(1))
+    if responsible is None:
+        raise HTTPException(422, "El estudio necesita un administrador activo como responsable")
+    return responsible
+
+
+def correct_case_responsible(db: Session, user: m.User, case: m.Case) -> None:
+    responsible = case_responsible(db, user)
+    if case.responsible_id != responsible.id:
+        before = public(case)
+        case.responsible_id = responsible.id
+        audit(db, user, case, "Corregir responsable del caso", before)
+
+
 def case_scope(db: Session, user: m.User):
     query = select(m.Case).where(m.Case.tenant_id == user.tenant_id)
     if user.role != "admin":
@@ -123,8 +142,10 @@ def paid(db: Session, user: m.User, installment_id: int) -> Decimal:
 def installment_view(db: Session, user: m.User, item: m.Installment) -> dict[str, Any]:
     applied = paid(db, user, item.id)
     balance = item.amount - applied
-    state = "pagado" if balance == ZERO else "vencido" if item.due_date < today() else "parcial" if applied > ZERO else "pendiente"
-    return {**public(item), "paid": applied, "balance": balance, "state": state}
+    state = "pagado" if balance == ZERO else "esperando_evento" if item.due_date is None else "vencido" if item.due_date < today() else "parcial" if applied > ZERO else "pendiente"
+    entry_id = db.scalar(select(m.Entry.id).where(m.Entry.tenant_id == user.tenant_id,
+        m.Entry.case_id == item.case_id, m.Entry.payment_installment_id == item.id))
+    return {**public(item), "paid": applied, "balance": balance, "state": state, "entry_id": entry_id}
 
 
 def case_view(db: Session, user: m.User, item: m.Case) -> dict[str, Any]:
@@ -151,13 +172,42 @@ def case_view(db: Session, user: m.User, item: m.Case) -> dict[str, Any]:
 def entry_view(db: Session, user: m.User, item: m.Entry) -> dict[str, Any]:
     case = get(db, m.Case, item.case_id, user)
     client = get(db, m.Client, case.client_id, user)
-    return {
-        **public(item), "client_code": public(client)["code"], "client_name": client.name,
+    data = {
+        **public(item, {"payment_installment_id"}), "client_code": public(client)["code"], "client_name": client.name,
         "process_type": case.process_type,
         "responsible_name": get(db, m.User, item.registered_by, user).name,
-        "can_attend": item.alert_date is not None and not item.attended
+        "can_attend": (item.alert_date is not None or item.payment_installment_id is not None) and not item.attended
             and access_level(db, user, case.id) == "edit",
     }
+    if user.role == "admin" and item.payment_installment_id is not None:
+        quota = get(db, m.Installment, item.payment_installment_id, user)
+        data["payment_event"] = quota.event_name
+        data["payment_installment_id"] = item.payment_installment_id
+        data["payment_activated"] = quota.activated_at is not None
+    return data
+
+
+def validate_entry_payment(db: Session, user: m.User, case_id: int, installment_id: int | None,
+        entry: m.Entry | None = None) -> None:
+    previous = entry.payment_installment_id if entry else None
+    if installment_id == previous:
+        return
+    admin_only = user.role != "admin"
+    if admin_only:
+        raise HTTPException(403, "Solo el administrador puede vincular una cláusula de pago")
+    if entry and entry.attended:
+        raise HTTPException(422, "No se puede cambiar la cláusula de una actuación atendida")
+    if installment_id is None:
+        return
+    quota = get(db, m.Installment, installment_id, user, lock=True)
+    if quota.case_id != case_id or quota.event_name is None:
+        raise HTTPException(422, "Selecciona una cuota por evento del mismo caso")
+    if quota.activated_at is not None:
+        raise HTTPException(422, "Esta cláusula de pago ya está activada")
+    linked = db.scalar(select(m.Entry.id).where(m.Entry.tenant_id == user.tenant_id,
+        m.Entry.payment_installment_id == installment_id))
+    if linked is not None:
+        raise HTTPException(422, "Esta cuota ya está vinculada a otra actuación")
 
 
 def validate_plan(fee: Decimal | None, plan: list[Any] | None) -> None:

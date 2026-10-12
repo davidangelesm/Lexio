@@ -2,6 +2,7 @@ export interface ReportTotals {
   total_cases: number;
   active_cases: number;
   concluded_cases: number;
+  withdrawn_cases: number;
   fee?: string;
   paid?: string;
   balance?: string;

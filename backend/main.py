@@ -139,6 +139,20 @@ def legal_areas(db: Db, user: Actor) -> list[dict[str, Any]]:
     return [{"id": area.id, "name": area.name} for area in db.scalars(query)]
 
 
+@app.post("/legal-areas", status_code=201)
+def create_legal_area(data: s.LegalAreaIn, db: Db, user: Actor) -> dict[str, Any]:
+    admin(user)
+    row = m.LegalArea(tenant_id=user.tenant_id, name=data.name)
+    db.add(row)
+    try:
+        d.audit(db, user, row, "Agregar rama de derecho")
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Ya existe una rama de derecho con ese nombre en el estudio") from None
+    return {"id": row.id, "name": row.name}
+
+
 @app.get("/cases")
 def cases(db: Db, user: Actor, search: str = "", client_id: int | None = None,
         area_id: Annotated[int | None, Query(gt=0)] = None, status: str | None = None) -> list[dict[str, Any]]:
@@ -166,11 +180,11 @@ def create_case(data: s.CaseIn, db: Db, user: Actor) -> dict[str, Any]:
     if user.role == "admin":
         d.validate_plan(data.fee, data.installments)
     d.get(db, m.LegalArea, data.area_id, user)
-    target = d.get(db, m.User, data.responsible_id or user.id, user)
-    if not target.active:
-        raise HTTPException(422, "Responsable inactivo")
-    if user.role != "admin" and target.id != user.id:
-        raise HTTPException(403, "El administrador debe asignar otros responsables")
+    target = d.case_responsible(db, user)
+    if data.responsible_id is not None:
+        requested = d.get(db, m.User, data.responsible_id, user)
+        if requested.id != target.id:
+            raise HTTPException(422, "El responsable del caso es el administrador; los asistentes se agregan al equipo autorizado")
     if data.client is not None:
         if user.role != "admin" and not user.can_create_clients:
             raise HTTPException(403, "No tiene permiso para registrar clientes")
@@ -192,7 +206,8 @@ def create_case(data: s.CaseIn, db: Db, user: Actor) -> dict[str, Any]:
     for number, item in enumerate(data.installments or [], 1):
         if item.id is not None:
             raise HTTPException(422, "Las cuotas nuevas no llevan identificador")
-        db.add(m.Installment(tenant_id=user.tenant_id, case_id=row.id, number=number, amount=item.amount, due_date=item.due_date))
+        db.add(m.Installment(tenant_id=user.tenant_id, case_id=row.id, number=number, amount=item.amount,
+            due_date=item.due_date, event_name=item.event_name))
     d.save(db)
     return d.case_view(db, user, row)
 
@@ -219,15 +234,8 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
         d.audit(db, user, client, "Corregir cliente", previous)
     if data.responsible_id is not None:
         target = d.get(db, m.User, data.responsible_id, user)
-        if not target.active:
-            raise HTTPException(422, "Responsable inactivo")
-        if user.role != "admin" and target.id != row.responsible_id:
-            raise HTTPException(403, "El administrador debe asignar otros responsables")
-        grant = db.scalar(select(m.Access).where(m.Access.tenant_id == user.tenant_id, m.Access.case_id == key, m.Access.user_id == target.id))
-        if grant is None:
-            db.add(m.Access(tenant_id=user.tenant_id, case_id=key, user_id=target.id, level="edit"))
-        elif grant.level != "edit":
-            grant.level = "edit"
+        if target.id != d.case_responsible(db, user).id:
+            raise HTTPException(422, "El responsable del caso es el administrador; los asistentes se agregan al equipo autorizado")
     if financial:
         current = d.installments(db, user, key)
         fee = data.fee if "fee" in data.model_fields_set else row.fee
@@ -238,13 +246,26 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
             d.validate_plan(fee, plan)
         elif sum((x.amount for x in current), d.ZERO) != fee:
             raise HTTPException(422, "Actualiza también las cuotas para que sumen los honorarios")
-        if d.payments(db, user, key):
-            if fee != row.fee or (plan is not None and [(x.id, x.amount) for x in plan] != [(x.id, x.amount) for x in current]):
-                raise HTTPException(422, "Con abonos registrados solo puedes corregir las fechas de las cuotas")
-            for old, new in zip(current, plan or current):
+        linked = db.scalar(select(m.Entry.id).where(m.Entry.tenant_id == user.tenant_id,
+            m.Entry.case_id == key, m.Entry.payment_installment_id.is_not(None))) is not None
+        if d.payments(db, user, key) or linked:
+            preserved = plan[:len(current)] if plan is not None else current
+            added = plan[len(current):] if plan is not None else []
+            if ([(x.id, x.amount, x.event_name) for x in preserved] != [(x.id, x.amount, x.event_name) for x in current]
+                    or any(x.id is not None for x in added)
+                    or fee != row.fee + sum((x.amount for x in added), d.ZERO)):
+                raise HTTPException(422, "Con abonos o actuaciones vinculadas conserva las cuotas existentes y agrega las nuevas al final, aumentando los honorarios por su importe")
+            for old, new in zip(current, preserved):
+                if old.event_name is not None and old.due_date != new.due_date:
+                    raise HTTPException(422, "La fecha de una cuota por evento se activa al atender su actuación")
                 if old.due_date != new.due_date:
                     d.cancel_notices(db, user, f"payment:{old.id}")
                     old.due_date = new.due_date
+            for number, item in enumerate(added, len(current) + 1):
+                if item.event_name is not None and item.due_date is not None:
+                    raise HTTPException(422, "Una cuota por evento se activa desde la bitácora")
+                db.add(m.Installment(tenant_id=user.tenant_id, case_id=key, number=number, amount=item.amount,
+                    due_date=item.due_date, event_name=item.event_name))
         elif plan is not None:
             if any(item.id is not None and item.id not in {x.id for x in current} for item in plan):
                 raise HTTPException(422, "Las cuotas deben pertenecer a esta ficha")
@@ -252,10 +273,14 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
                 d.cancel_notices(db, user, f"payment:{item.id}")
             db.execute(delete(m.Installment).where(m.Installment.tenant_id == user.tenant_id, m.Installment.case_id == key))
             for number, item in enumerate(plan, 1):
-                db.add(m.Installment(tenant_id=user.tenant_id, case_id=key, number=number, amount=item.amount, due_date=item.due_date))
+                if item.event_name is not None and item.due_date is not None:
+                    raise HTTPException(422, "Una cuota por evento se activa desde la bitácora")
+                db.add(m.Installment(tenant_id=user.tenant_id, case_id=key, number=number, amount=item.amount,
+                    due_date=item.due_date, event_name=item.event_name))
         row.fee = fee
     for name, value in data.model_dump(exclude={"client", "fee", "installments"}, exclude_none=True).items():
         setattr(row, name, value)
+    row.responsible_id = d.case_responsible(db, user).id
     d.audit(db, user, row, "Actualizar caso", before)
     d.save(db)
     return d.case_view(db, user, row)
@@ -271,12 +296,13 @@ def list_access(key: int, db: Db, user: Actor) -> list[dict[str, Any]]:
 @app.post("/cases/{key}/access")
 def grant_access(key: int, data: s.Grant, db: Db, user: Actor) -> dict[str, Any]:
     admin(user)
-    case = d.case_access(db, user, key)
+    case = d.case_access(db, user, key, lock=True)
     target = d.get(db, m.User, data.user_id, user)
     if not target.active:
         raise HTTPException(422, "Usuario inactivo")
-    if case.responsible_id == target.id and data.level != "edit":
-        raise HTTPException(422, "El responsable necesita permiso para editar")
+    if target.role == "admin":
+        raise HTTPException(422, "El administrador tiene acceso permanente; agrega solo asistentes")
+    d.correct_case_responsible(db, user, case)
     row = db.scalar(select(m.Access).where(m.Access.tenant_id == user.tenant_id, m.Access.case_id == key, m.Access.user_id == target.id))
     before = d.public(row) if row else None
     if row is None:
@@ -292,12 +318,14 @@ def grant_access(key: int, data: s.Grant, db: Db, user: Actor) -> dict[str, Any]
 @app.delete("/cases/{key}/access/{user_id}")
 def revoke_access(key: int, user_id: int, db: Db, user: Actor) -> dict[str, str]:
     admin(user)
-    case = d.case_access(db, user, key)
-    if case.responsible_id == user_id:
-        raise HTTPException(422, "Asigna otro responsable antes de retirar su acceso")
+    case = d.case_access(db, user, key, lock=True)
+    target = d.get(db, m.User, user_id, user)
+    if target.role == "admin":
+        raise HTTPException(422, "El administrador tiene acceso permanente")
     row = db.scalar(select(m.Access).where(m.Access.tenant_id == user.tenant_id, m.Access.case_id == key, m.Access.user_id == user_id))
     if row is None:
         raise HTTPException(404, "Acceso no encontrado")
+    d.correct_case_responsible(db, user, case)
     d.audit(db, user, row, "Retirar acceso", d.public(row))
     db.delete(row)
     d.save(db)
@@ -320,7 +348,8 @@ def case_entries(key: int, db: Db, user: Actor) -> list[dict[str, Any]]:
 
 @app.post("/cases/{key}/entries", status_code=201)
 def create_entry(key: int, data: s.EntryIn, db: Db, user: Actor) -> dict[str, Any]:
-    d.case_access(db, user, key, edit=True)
+    d.case_access(db, user, key, edit=True, lock=True)
+    d.validate_entry_payment(db, user, key, data.payment_installment_id)
     row = m.Entry(tenant_id=user.tenant_id, case_id=key, registered_by=user.id, **data.model_dump())
     db.add(row)
     d.audit(db, user, row, "Registrar actuación")
@@ -330,8 +359,11 @@ def create_entry(key: int, data: s.EntryIn, db: Db, user: Actor) -> dict[str, An
 
 @app.put("/entries/{key}")
 def update_entry(key: int, data: s.EntryIn, db: Db, user: Actor) -> dict[str, Any]:
+    row = d.get(db, m.Entry, key, user)
+    d.case_access(db, user, row.case_id, edit=True, lock=True)
     row = d.get(db, m.Entry, key, user, lock=True)
-    d.case_access(db, user, row.case_id, edit=True)
+    link = data.payment_installment_id if "payment_installment_id" in data.model_fields_set else row.payment_installment_id
+    d.validate_entry_payment(db, user, row.case_id, link, row)
     before = d.public(row)
     if row.alert_date != data.alert_date:
         d.cancel_notices(db, user, f"legal:{row.id}")
@@ -341,8 +373,9 @@ def update_entry(key: int, data: s.EntryIn, db: Db, user: Actor) -> dict[str, An
                 m.Notice.tenant_id == user.tenant_id,
                 m.Notice.source_key.startswith(f"legal:{row.id}:{data.alert_date.isoformat()}:", autoescape=True),
             ).values(status="pendiente", read_at=None))
-    for name, value in data.model_dump().items():
+    for name, value in data.model_dump(exclude={"payment_installment_id"}).items():
         setattr(row, name, value)
+    row.payment_installment_id = link
     d.audit(db, user, row, "Editar actuación", before)
     d.save(db)
     return d.entry_view(db, user, row)
@@ -350,15 +383,29 @@ def update_entry(key: int, data: s.EntryIn, db: Db, user: Actor) -> dict[str, An
 
 @app.post("/entries/{key}/attend")
 def attend_entry(key: int, db: Db, user: Actor) -> dict[str, Any]:
+    row = d.get(db, m.Entry, key, user)
+    d.case_access(db, user, row.case_id, edit=True, lock=True)
     row = d.get(db, m.Entry, key, user, lock=True)
-    d.case_access(db, user, row.case_id, edit=True)
-    if row.alert_date is None:
+    if row.alert_date is None and row.payment_installment_id is None:
         raise HTTPException(422, "Esta actuación no tiene una obligación pendiente")
     if not row.attended:
         before = d.public(row)
         row.attended = True
         d.cancel_notices(db, user, f"legal:{row.id}")
         d.audit(db, user, row, "Marcar atendido", before)
+        if row.payment_installment_id is not None:
+            quota = d.get(db, m.Installment, row.payment_installment_id, user, lock=True)
+            if quota.activated_at is None:
+                previous = d.public(quota)
+                quota.due_date = d.today()
+                quota.activated_at = m.now()
+                d.audit(db, user, quota, "Activar cuota por evento", previous)
+                if quota.amount > d.paid(db, user, quota.id):
+                    for recipient in db.scalars(select(m.User).where(m.User.tenant_id == user.tenant_id,
+                            m.User.role == "admin", m.User.active.is_(True))):
+                        db.add(m.Notice(tenant_id=user.tenant_id, user_id=recipient.id, case_id=row.case_id,
+                            source_key=f"payment:{quota.id}:{quota.due_date.isoformat()}:0", kind="pago",
+                            target_date=quota.due_date, notice_date=quota.due_date, anticipation=0))
         d.save(db)
     return d.entry_view(db, user, row)
 
@@ -417,12 +464,13 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
     if user.role == "admin":
         for item in db.scalars(select(m.Installment).where(m.Installment.tenant_id == user.tenant_id, m.Installment.case_id.in_(cases))):
             balance = item.amount - d.paid(db, user, item.id)
-            if balance > d.ZERO:
+            if balance > d.ZERO and item.due_date is not None:
                 sources[f"payment:{item.id}"] = {
                     "case_id": item.case_id, "kind": "pago", "target_date": item.due_date,
                     "description": f"Cuota {item.number}", "balance": balance,
                     "responsible_name": d.get(db, m.User, cases[item.case_id].responsible_id, user).name,
                     "can_attend": False,
+                    **({"event_name": item.event_name} if item.event_name is not None else {}),
                 }
         for data in sources.values():
             case = cases[data["case_id"]]
@@ -432,7 +480,7 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
     if current.weekday() < 5:
         for source, data in sources.items():
             target = data["target_date"]
-            for anticipation in (5, 3, 1, 0):
+            for anticipation in ((0,) if data.get("event_name") else (5, 3, 1, 0)):
                 when = d.shift(target, -anticipation)
                 if when > current:
                     continue
@@ -496,19 +544,19 @@ def reports(db: Db, user: Actor) -> dict[str, Any]:
     for case in db.scalars(d.case_scope(db, user)):
         if case.area_id not in groups:
             groups[case.area_id] = {"area_id": case.area_id, "area": d.get(db, m.LegalArea, case.area_id, user).name,
-                "total_cases": 0, "active_cases": 0, "concluded_cases": 0}
+                "total_cases": 0, "active_cases": 0, "concluded_cases": 0, "withdrawn_cases": 0}
             if user.role == "admin":
                 groups[case.area_id].update({"fee": d.ZERO, "paid": d.ZERO, "balance": d.ZERO})
         row = groups[case.area_id]
         row["total_cases"] += 1
-        row["active_cases" if case.status == "activo" else "concluded_cases"] += 1
+        row[{"activo": "active_cases", "concluido": "concluded_cases", "retirado": "withdrawn_cases"}[case.status]] += 1
         if user.role == "admin":
             received = sum((p.amount for p in d.payments(db, user, case.id)), d.ZERO)
             fee = case.fee or d.ZERO
             row["fee"] += fee
             row["paid"] += received
             row["balance"] += fee - received
-    fields = ["total_cases", "active_cases", "concluded_cases"]
+    fields = ["total_cases", "active_cases", "concluded_cases", "withdrawn_cases"]
     if user.role == "admin":
         fields += ["fee", "paid", "balance"]
     totals = {field: sum((r[field] for r in groups.values()), d.ZERO if field in ("fee", "paid", "balance") else 0) for field in fields}
@@ -544,6 +592,7 @@ def dashboard(db: Db, user: Actor) -> dict[str, Any]:
             client = d.get(db, m.Client, case.client_id, user)
             result["upcoming_payments"].append({
                 "id": item.id, "case_id": case.id, "case_code": d.public(case)["code"], "process_type": case.process_type,
+                **({"event_name": item.event_name} if item.event_name is not None else {}),
                 "client_code": d.public(client)["code"], "client_name": client.name,
                 "number": item.number, "due_date": item.due_date,
                 "amount": item.amount, "paid": paid, "balance": item.amount - paid,

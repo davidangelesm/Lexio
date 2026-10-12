@@ -124,7 +124,15 @@ export default function CaseWorkspace({
       <Card>
         <div className="card-head">
           <h2>Datos del cliente y proceso</h2>
-          <Badge>{item.status === "activo" ? "Activo" : "Concluido"}</Badge>
+          <Badge>
+            {
+              {
+                activo: "Activo",
+                concluido: "Concluido",
+                retirado: "Retirado",
+              }[item.status]
+            }
+          </Badge>
         </div>
         <dl className="details-grid">
           <div>
@@ -262,7 +270,26 @@ export default function CaseWorkspace({
                       {(item.installments || []).map((quota) => (
                         <tr key={quota.id}>
                           <td>Cuota {quota.number}</td>
-                          <td>{dateLabel(quota.due_date)}</td>
+                          <td>
+                            {quota.event_name ? (
+                              <>
+                                <strong>{quota.event_name}</strong>
+                                <small>
+                                  {quota.due_date
+                                    ? `Exigible desde ${dateLabel(quota.due_date)}`
+                                    : "Al atender la actuación vinculada"}
+                                </small>
+                                {!quota.entry_id && (
+                                  <small>
+                                    Vincula este evento al registrar una
+                                    actuación en Bitácora.
+                                  </small>
+                                )}
+                              </>
+                            ) : (
+                              dateLabel(quota.due_date)
+                            )}
+                          </td>
                           <td>{money(quota.amount)}</td>
                           <td>{money(quota.paid)}</td>
                           <td>{money(quota.balance)}</td>
@@ -270,9 +297,11 @@ export default function CaseWorkspace({
                             <Badge>
                               {Number(quota.balance) === 0
                                 ? "Cancelado"
-                                : quota.state === "vencido"
-                                  ? "Vencido"
-                                  : "Pendiente"}
+                                : quota.state === "esperando_evento"
+                                  ? "Esperando evento"
+                                  : quota.state === "vencido"
+                                    ? "Vencido"
+                                    : "Pendiente"}
                             </Badge>
                           </td>
                         </tr>
@@ -431,7 +460,6 @@ export default function CaseWorkspace({
             <CaseForm
               item={item}
               actor={actor}
-              users={users}
               clients={clients}
               areas={areas}
               saved={(updated) => {
@@ -446,10 +474,13 @@ export default function CaseWorkspace({
               caseId={item.id}
               actor={actor}
               item={editEntry}
+              installments={item.installments}
               done={done}
             />
           )}
-          {modal === "equipo" && <CaseAccess caseId={item.id} users={users} />}
+          {modal === "equipo" && (
+            <CaseAccess item={item} users={users} changed={load} />
+          )}
         </Modal>
       )}
       {remove && (

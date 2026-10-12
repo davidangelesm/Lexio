@@ -38,6 +38,10 @@ class UserUpdate(Input):
     password: Password | None = Field(default=None, min_length=6, max_length=128)
 
 
+class LegalAreaIn(Input):
+    name: str = Field(min_length=1, max_length=80)
+
+
 class ClientIn(Input):
     document_type: Literal["DNI", "RUC", "CE"]
     document_number: str = Field(min_length=1, max_length=20)
@@ -58,7 +62,16 @@ class ClientIn(Input):
 class InstallmentIn(Input):
     id: int | None = Field(default=None, gt=0)
     amount: Money
-    due_date: date
+    due_date: date | None = None
+    event_name: str | None = Field(default=None, min_length=1, max_length=150)
+
+    @model_validator(mode="after")
+    def payment_trigger(self):
+        if self.event_name is None and self.due_date is None:
+            raise ValueError("La cuota necesita una fecha o un evento de pago")
+        if self.event_name is not None and self.due_date is not None and self.id is None:
+            raise ValueError("Una cuota nueva por evento no tiene fecha hasta que se atiende la actuación")
+        return self
 
 
 class CaseIn(Input):
@@ -67,7 +80,7 @@ class CaseIn(Input):
     area_id: int = Field(gt=0)
     process_type: str = Field(min_length=1, max_length=150)
     initial_stage: str = Field(min_length=1, max_length=100)
-    status: Literal["activo", "concluido"] = "activo"
+    status: Literal["activo", "concluido", "retirado"] = "activo"
     responsible_id: int | None = Field(default=None, gt=0)
     fee: Money | None = None
     installments: list[InstallmentIn] | None = Field(default=None, min_length=1, max_length=100)
@@ -84,7 +97,7 @@ class CaseUpdate(Input):
     area_id: int | None = Field(default=None, gt=0)
     process_type: str | None = Field(default=None, min_length=1, max_length=150)
     initial_stage: str | None = Field(default=None, min_length=1, max_length=100)
-    status: Literal["activo", "concluido"] | None = None
+    status: Literal["activo", "concluido", "retirado"] | None = None
     responsible_id: int | None = Field(default=None, gt=0)
     fee: Money | None = None
     installments: list[InstallmentIn] | None = Field(default=None, min_length=1, max_length=100)
@@ -107,6 +120,7 @@ class EntryIn(Input):
     subject_type: Literal["legal", "otro"] = "legal"
     description: str = Field(min_length=1, max_length=10000)
     alert_date: date | None = None
+    payment_installment_id: int | None = Field(default=None, gt=0)
 
 
 class PaymentIn(Input):

@@ -93,6 +93,9 @@ export default function DashboardPage({
                           <td>
                             {dateLabel(item.due_date)}
                             <small>Cuota {item.number}</small>
+                            {item.event_name && (
+                              <small>Evento: {item.event_name}</small>
+                            )}
                           </td>
                           <td>{money(item.balance)}</td>
                           <td>
