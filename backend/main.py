@@ -447,15 +447,23 @@ def update_collection(key: int, data: s.CollectionUpdate, db: Db, user: Actor) -
     row = d.get(db, m.Installment, key, user)
     case = d.case_access(db, user, row.case_id, edit=True, lock=True)
     row = d.get(db, m.Installment, key, user, lock=True)
-    if data.reason is not None and row.amount == d.paid(db, user, row.id):
-        raise HTTPException(422, "Una cuota pagada no puede marcarse incobrable")
-    if data.reason != row.uncollectible_reason:
-        before = d.public(row)
-        row.uncollectible_reason = data.reason
-        row.uncollectible_at = m.now() if data.reason is not None else None
-        d.cancel_notices(db, user, f"payment:{row.id}")
-        d.audit(db, user, row, "Marcar cuota incobrable" if data.reason is not None else "Reactivar cobranza", before)
-        d.save(db)
+    d.update_collection(db, user, row, data.reason)
+    d.save(db)
+    return d.case_view(db, user, case)
+
+
+@app.put("/cases/{key}/collection")
+def update_case_collection(key: int, data: s.CollectionBatchUpdate, db: Db, user: Actor) -> dict[str, Any]:
+    admin(user)
+    case = d.case_access(db, user, key, edit=True, lock=True)
+    if len(set(data.installment_ids)) != len(data.installment_ids):
+        raise HTTPException(422, "Las cuotas seleccionadas no deben repetirse")
+    for installment_id in data.installment_ids:
+        row = d.get(db, m.Installment, installment_id, user, lock=True)
+        if row.case_id != key:
+            raise HTTPException(404, "Cuota no encontrada en este caso")
+        d.update_collection(db, user, row, data.reason)
+    d.save(db)
     return d.case_view(db, user, case)
 
 

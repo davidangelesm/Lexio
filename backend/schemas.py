@@ -78,6 +78,10 @@ class CollectionUpdate(Input):
     reason: str | None = Field(min_length=1, max_length=500)
 
 
+class CollectionBatchUpdate(CollectionUpdate):
+    installment_ids: list[Annotated[int, Field(gt=0)]] = Field(min_length=1, max_length=100)
+
+
 class CaseIn(Input):
     client_id: int | None = Field(default=None, gt=0)
     client: ClientIn | None = None

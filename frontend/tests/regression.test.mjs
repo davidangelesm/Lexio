@@ -1443,18 +1443,29 @@ test("cobros vencidos usan el mismo rojo y estado urgente que las alertas proces
   assert.match(future, /Pendiente/);
 });
 
-test("cuotas incobrables exigen motivo y permiten reactivar cobranza", async () => {
+test("modal selecciona varias cuotas incobrables con un motivo común y permite reactivarlas", async () => {
   const quota = { ...item.installments[0], uncollectible_reason: null };
+  const quotas = [quota, item.installments[1]];
+  const props = { caseId: item.id, quotas, done: async () => {} };
   const calls = capture(item);
   const form = new FormData();
   form.set("reason", " Cliente no pagará ");
-  await CollectionForm({ quota, done: async () => {} }).props.submit(form);
-  assert.equal(calls[0].url, "https://lexio.test/installments/1/collection");
+  await assert.rejects(
+    CollectionForm(props).props.submit(form),
+    /Selecciona al menos una cuota/,
+  );
+  form.append("installment_ids", "1");
+  form.append("installment_ids", "2");
+  await CollectionForm(props).props.submit(form);
+  assert.equal(calls[0].url, "https://lexio.test/cases/1/collection");
   assert.equal(calls[0].method, "PUT");
-  assert.deepEqual(JSON.parse(calls[0].body), { reason: "Cliente no pagará" });
+  assert.deepEqual(JSON.parse(calls[0].body), {
+    installment_ids: [1, 2],
+    reason: "Cliente no pagará",
+  });
   form.set("reason", "  ");
   await assert.rejects(
-    CollectionForm({ quota, done: noop }).props.submit(form),
+    CollectionForm(props).props.submit(form),
     /Indica el motivo/,
   );
   assert.equal(calls.length, 1);
@@ -1463,14 +1474,38 @@ test("cuotas incobrables exigen motivo y permiten reactivar cobranza", async () 
     state: "incobrable",
     uncollectible_reason: "Cliente no pagará",
   };
-  await CollectionForm({ quota: marked, done: async () => {} }).props.submit(
-    form,
-  );
-  assert.deepEqual(JSON.parse(calls[1].body), { reason: null });
+  form.delete("installment_ids");
+  form.append("installment_ids", "1");
+  await CollectionForm({
+    ...props,
+    quotas: [marked],
+    restore: true,
+  }).props.submit(form);
+  assert.deepEqual(JSON.parse(calls[1].body), {
+    installment_ids: [1],
+    reason: null,
+  });
   assert.match(
-    render(CollectionForm, { quota: marked, done: noop }),
+    render(CollectionForm, { ...props, quotas: [marked], restore: true }),
     /Reactivar cobranza|Cliente no pagará/,
   );
+  const html = render(CollectionForm, {
+    ...props,
+    quotas: [
+      ...quotas,
+      { ...marked, id: 3, number: 3 },
+      { ...quota, id: 4, number: 4, balance: "0.00" },
+    ],
+  });
+  assert.match(html, /aria-label="Seleccionar cuota 1"/);
+  assert.match(html, /aria-label="Seleccionar cuota 2"/);
+  assert.doesNotMatch(html, /Seleccionar cuota 3|Seleccionar cuota 4/);
+  form.set("installment_ids", "999");
+  await assert.rejects(
+    CollectionForm(props).props.submit(form),
+    /Selecciona al menos una cuota/,
+  );
+  assert.equal(calls.length, 2);
 });
 
 test("incobrables conservan saldo visible solo al administrador y se excluyen de abonos", () => {
@@ -1498,6 +1533,28 @@ test("incobrables conservan saldo visible solo al administrador y se excluyen de
   assert.match(html, /Incobrable excluido/);
   assert.match(html, /Saldo exigible/);
   assert.doesNotMatch(html, /Incluye/);
+  const plan = html.match(/<table>[\s\S]*?<\/table>/)[0];
+  assert.doesNotMatch(plan, /<button|<th>Cobranza<\/th>/);
+  assert.equal(
+    (html.match(/>Marcar cuotas como incobrables<\/button>/g) || []).length,
+    1,
+  );
+  assert.ok(
+    html.indexOf("Marcar cuotas como incobrables") >
+      html.indexOf("Abonos registrados"),
+  );
+  const buttons = findButtons(
+    componentTree(CaseWorkspace, {
+      selected: marked,
+      actor: admin,
+      users: [],
+      clients: [],
+      areas,
+    }),
+    "Marcar cuotas como incobrables",
+  );
+  assert.equal(buttons.length, 1);
+  assert.equal(buttons[0].props.className, "secondary");
   const staffHtml = render(CaseWorkspace, {
     selected: marked,
     actor: staff,

@@ -9,7 +9,6 @@ import type {
   Client,
   Entry,
   LegalArea,
-  Installment,
   Payment,
   User,
 } from "../../types";
@@ -43,7 +42,6 @@ export default function CaseWorkspace({
   const [editEntry, setEditEntry] = useState<Entry>();
   const [modal, setModal] = useState("");
   const [remove, setRemove] = useState<Payment>();
-  const [collection, setCollection] = useState<Installment>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const isAdmin = actor.role === "admin";
@@ -75,7 +73,6 @@ export default function CaseWorkspace({
     setModal("");
     setEditEntry(undefined);
     setRemove(undefined);
-    setCollection(undefined);
     await load();
   }
   return (
@@ -277,7 +274,6 @@ export default function CaseWorkspace({
                         <th>Abonado</th>
                         <th>Saldo</th>
                         <th>Estado</th>
-                        <th>Cobranza</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -323,19 +319,6 @@ export default function CaseWorkspace({
                               <small>{quota.uncollectible_reason}</small>
                             )}
                           </td>
-                          <td>
-                            {Number(quota.balance) > 0 && (
-                              <button
-                                className="secondary"
-                                disabled={busy}
-                                onClick={() => setCollection(quota)}
-                              >
-                                {quota.uncollectible_reason
-                                  ? "Reactivar cobranza"
-                                  : "Marcar incobrable"}
-                              </button>
-                            )}
-                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -374,6 +357,45 @@ export default function CaseWorkspace({
                   </div>
                 ) : (
                   <Empty text="Todavía no hay abonos registrados." />
+                )}
+                {(item.installments || []).some(
+                  (quota) => Number(quota.balance) > 0,
+                ) && (
+                  <section className="mt-6" aria-label="Cuotas incobrables">
+                    <h3>Cuotas incobrables</h3>
+                    <p className="muted text-sm">
+                      Gestiona aquí las cuotas que excepcionalmente no se pueden
+                      cobrar.
+                    </p>
+                    <div className="actions">
+                      {(item.installments || []).some(
+                        (quota) =>
+                          Number(quota.balance) > 0 &&
+                          !quota.uncollectible_reason,
+                      ) && (
+                        <button
+                          className="secondary"
+                          disabled={busy}
+                          onClick={() => setModal("incobrables")}
+                        >
+                          Marcar cuotas como incobrables
+                        </button>
+                      )}
+                      {(item.installments || []).some(
+                        (quota) =>
+                          Number(quota.balance) > 0 &&
+                          !!quota.uncollectible_reason,
+                      ) && (
+                        <button
+                          className="secondary"
+                          disabled={busy}
+                          onClick={() => setModal("reactivar")}
+                        >
+                          Reactivar cobranza
+                        </button>
+                      )}
+                    </div>
+                  </section>
                 )}
               </>
             )}
@@ -419,17 +441,21 @@ export default function CaseWorkspace({
       {modal && (
         <Modal
           title={
-            modal === "concluir"
-              ? "Concluir caso"
-              : modal === "caso"
-                ? "Editar caso"
-                : modal === "pago"
-                  ? "Registrar abono"
-                  : modal === "equipo"
-                    ? "Equipo autorizado"
-                    : editEntry
-                      ? "Editar actuación"
-                      : "Registrar actuación"
+            modal === "incobrables"
+              ? "Marcar cuotas como incobrables"
+              : modal === "reactivar"
+                ? "Reactivar cobranza"
+                : modal === "concluir"
+                  ? "Concluir caso"
+                  : modal === "caso"
+                    ? "Editar caso"
+                    : modal === "pago"
+                      ? "Registrar abono"
+                      : modal === "equipo"
+                        ? "Equipo autorizado"
+                        : editEntry
+                          ? "Editar actuación"
+                          : "Registrar actuación"
           }
           close={() => {
             if (modal === "concluir" && busy) return;
@@ -501,6 +527,14 @@ export default function CaseWorkspace({
             />
           )}
           {modal === "pago" && <PaymentForm item={item} done={done} />}
+          {(modal === "incobrables" || modal === "reactivar") && (
+            <CollectionForm
+              caseId={item.id}
+              quotas={item.installments || []}
+              restore={modal === "reactivar"}
+              done={done}
+            />
+          )}
           {modal === "actuacion" && (
             <EntryForm
               caseId={item.id}
@@ -513,18 +547,6 @@ export default function CaseWorkspace({
           {modal === "equipo" && (
             <CaseAccess item={item} users={users} changed={load} />
           )}
-        </Modal>
-      )}
-      {collection && (
-        <Modal
-          title={
-            collection.uncollectible_reason
-              ? "Reactivar cobranza"
-              : "Cuota incobrable"
-          }
-          close={() => setCollection(undefined)}
-        >
-          <CollectionForm quota={collection} done={done} />
         </Modal>
       )}
       {remove && (

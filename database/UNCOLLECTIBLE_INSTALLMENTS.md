@@ -6,8 +6,14 @@ No ejecutar el esquema inicial ni `reset_demo_schema.py` sobre una base con dato
 Pausar las escrituras durante el cambio; MySQL confirma DDL automáticamente.
 La migración agrega dos campos opcionales sin modificar registros existentes.
 
-El administrador marca una cuota desde Control financiero con un motivo obligatorio
-de hasta 500 caracteres. Se conserva el importe, vencimiento, vínculo por evento,
+El administrador usa la sección Cuotas incobrables al final de Control financiero,
+debajo de Abonos registrados. Marcar cuotas como incobrables abre un modal para
+seleccionar una o varias cuotas pendientes y registrar un motivo común obligatorio
+de hasta 500 caracteres. La selección se guarda en una sola transacción; si una
+cuota no es válida, no se marca ninguna. Reactivar cobranza permite seleccionar
+las cuotas incobrables que vuelven a ser exigibles. La tabla Plazos de pago solo
+muestra sus datos, estado y motivo, sin botones de incobrabilidad.
+Se conserva el importe, vencimiento, vínculo por evento,
 abonos y saldo. La auditoría registra la decisión y su reversión.
 Una cuota pagada no puede marcarse incobrable. Para modificar o retirar una cuota
 incobrable hay que reactivar su cobranza primero; las restricciones de cuotas con
@@ -42,11 +48,14 @@ pendientes con alerta tenían fechas del 9 y 10 de octubre. Por eso las alertas
 visibles eran vencidas. Las pruebas temporales cubren actuaciones Legal/Otro y
 cuotas con anticipaciones futuras para ambos roles y aislamiento entre estudios.
 
-Verificación de esta entrega: 118 pruebas backend y 45 frontend aprobadas,
+Verificación de esta entrega: 120 pruebas backend y 45 frontend aprobadas,
 TypeScript/Vite y ejecutable Tauri compilados, e instalador NSIS generado.
 El recorrido visual se comprobó con un caso, cuatro cuotas y cuatro actuaciones
 en una base temporal local que se elimina al cerrar el servidor de pruebas.
 Se verificaron los tres avisos anticipados, cobros vencidos en rojo, marcar y
 reactivar una cuota y su exclusión/reaparición en Inicio.
+La sección al final de Control financiero y su modal se comprobaron con otra
+base temporal: tres cuotas, una pagada y dos pendientes. Se marcaron las dos
+pendientes juntas y se reactivó solo una, comprobando el saldo exigible.
 No se instaló el ejecutable ni se desplegó Railway. La cobranza incobrable requiere
 la migración 007 antes de actualizar el backend de Railway.

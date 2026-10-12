@@ -153,6 +153,17 @@ def uncollectible_amount(db: Session, user: m.User, case_id: int) -> Decimal:
         if x.uncollectible_reason is not None), ZERO)
 
 
+def update_collection(db: Session, user: m.User, row: m.Installment, reason: str | None) -> None:
+    if reason is not None and row.amount == paid(db, user, row.id):
+        raise HTTPException(422, "Una cuota pagada no puede marcarse incobrable")
+    if reason != row.uncollectible_reason:
+        before = public(row)
+        row.uncollectible_reason = reason
+        row.uncollectible_at = m.now() if reason is not None else None
+        cancel_notices(db, user, f"payment:{row.id}")
+        audit(db, user, row, "Marcar cuota incobrable" if reason is not None else "Reactivar cobranza", before)
+
+
 def case_view(db: Session, user: m.User, item: m.Case) -> dict[str, Any]:
     data = {
         **public(item, {"fee"}),

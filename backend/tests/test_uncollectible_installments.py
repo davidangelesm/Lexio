@@ -116,3 +116,46 @@ def test_payment_correction_on_uncollectible_quota_does_not_reintroduce_collecti
     assert report["rows"][0]["balance"] == "500.00" and report["totals"]["balance"] == "500.00"
     current = client.put(f"/installments/{quota_id}/collection", headers=headers[0], json={"reason": None}).json()
     assert current["balance"] == "1000.00" and current["uncollectible"] == "0.00"
+
+
+def test_batch_collection_marks_and_restores_selected_quotas(setup):
+    client, headers, _, engine = setup
+    case = create(setup)
+    assert abono(client, headers[0], case, "100.00").status_code == 201
+    ids = [x["id"] for x in case["installments"]]
+    url = f"/cases/{case['id']}/collection"
+    client.get("/alerts", headers=headers[0])
+    response = client.put(url, headers=headers[0], json={"installment_ids": ids, "reason": "Cliente insolvente"})
+    assert response.status_code == 200, response.text
+    current = response.json()
+    assert current["balance"] == "0.00" and current["uncollectible"] == "900.00"
+    assert current["paid"] == "100.00" and current["fee"] == "1000.00"
+    assert all(x["state"] == "incobrable" for x in current["installments"])
+    assert client.get("/dashboard", headers=headers[0]).json()["upcoming_payments"] == []
+    current = client.put(url, headers=headers[0], json={"installment_ids": [ids[0]], "reason": None}).json()
+    assert current["balance"] == "400.00" and current["uncollectible"] == "500.00"
+    assert current["installments"][0]["state"] != "incobrable"
+    assert current["installments"][1]["state"] == "incobrable"
+    with Session(engine) as db:
+        assert len(list(db.scalars(select(m.Audit).where(m.Audit.action == "Marcar cuota incobrable")))) == 2
+        assert len(list(db.scalars(select(m.Audit).where(m.Audit.action == "Reactivar cobranza")))) == 1
+
+
+def test_batch_collection_is_atomic_and_rejects_foreign_paid_or_invalid_quotas(setup):
+    client, headers, _, engine = setup
+    case = create(setup)
+    second_case = create(setup, document="88888888")
+    ids = [x["id"] for x in case["installments"]]
+    url = f"/cases/{case['id']}/collection"
+    payload = {"installment_ids": ids, "reason": "Motivo"}
+    assert client.put(url, json=payload).status_code == 401
+    assert client.put(url, headers=headers[1], json=payload).status_code == 403
+    assert client.put(url, headers=headers[2], json=payload).status_code == 404
+    for selected, status in (([], 422), ([ids[0], ids[0]], 422), ([ids[0], 99999], 404), ([ids[0], second_case["installments"][0]["id"]], 404)):
+        assert client.put(url, headers=headers[0], json={**payload, "installment_ids": selected}).status_code == status
+        assert client.get(f"/cases/{case['id']}", headers=headers[0]).json()["uncollectible"] == "0.00"
+    assert abono(client, headers[0], case, "500.00", installment_id=ids[1]).status_code == 201
+    assert client.put(url, headers=headers[0], json=payload).status_code == 422
+    assert client.get(f"/cases/{case['id']}", headers=headers[0]).json()["uncollectible"] == "0.00"
+    with Session(engine) as db:
+        assert db.scalar(select(m.Audit).where(m.Audit.action == "Marcar cuota incobrable")) is None
