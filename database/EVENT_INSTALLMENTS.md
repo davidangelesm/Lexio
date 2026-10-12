@@ -26,13 +26,20 @@ Los abonos siguen distribuyéndose por número de cuota; se permiten anticipos
 sobre cuotas por evento. Activar una cuota ya pagada no genera cobranza. Leer un
 aviso no paga la cuota: el cobro se resuelve con abonos.
 
-Con abonos o actuaciones vinculadas, el plan conserva sus cuotas, montos y
-eventos; permite corregir vencimientos de cuotas por fecha y agregar cuotas al
-final, por fecha o evento. El total de honorarios aumenta exactamente por la
-suma de las cuotas nuevas, sin redistribuir abonos anteriores ni cambiar los
-vínculos con la bitácora. Antes de atender
-la actuación, el administrador puede quitar o cambiar su vínculo. Después de
-atenderla se conserva el vínculo y la fecha de activación.
+Cada cuota se bloquea solo cuando tiene un abono aplicado, incluso parcial:
+no se cambia su importe, modalidad, evento o fecha ni se retira del plan.
+Las otras cuotas pueden cambiar de importe o modalidad y retirarse, aunque
+el caso tenga otros abonos o actuaciones vinculadas. También se agregan cuotas
+al final. Los honorarios deben coincidir con la suma del plan actualizado.
+Se conservan los ID y el orden de las cuotas restantes y las aplicaciones de
+abonos; no se redistribuyen pagos anteriores.
+
+Cambiar el evento o pasar una cuota sin abonos a fecha retira su vínculo con
+la actuación anterior y reinicia su activación. La actuación conserva texto,
+autor, fecha y estado Atendido; la desvinculación queda auditada. Una cuota que
+pasa a evento espera una nueva actuación para activar el cobro. Cambiar solo
+su importe conserva el vínculo y la activación. La fecha de un evento vigente
+se establece al atender la actuación, no editando directamente el vencimiento.
 
 ## Despliegue
 

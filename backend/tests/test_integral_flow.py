@@ -92,7 +92,7 @@ def test_payment_correction_and_dates_keep_plan_identity(setup, monkeypatch):
     case = create(setup)
     payment = abono(client, headers[0], case, "500.00").json()
     plan = [{"id": x["id"], "amount": x["amount"], "due_date": x["due_date"]} for x in case["installments"]]
-    plan[0]["due_date"] = "2026-10-16"
+    plan[1]["due_date"] = "2026-10-16"
     response = client.put(f"/cases/{case['id']}", headers=headers[0], json={"installments": plan})
     assert response.status_code == 200, response.text
     assert response.json()["installments"][0]["id"] == case["installments"][0]["id"]

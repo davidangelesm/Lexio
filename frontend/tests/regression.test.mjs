@@ -583,7 +583,7 @@ test("editar proceso como staff conserva datos de cliente y oculta finanzas", ()
     /name="name"|name="document_number"|Honorarios|Control financiero/,
   );
 });
-test("caso con abonos permite ampliar honorarios y agregar cuotas conservando importes anteriores", () => {
+test("caso con abonos bloquea solo la cuota pagada y permite editar la otra", () => {
   const html = render(CaseForm, {
     actor: admin,
     users: [admin, staff],
@@ -592,17 +592,38 @@ test("caso con abonos permite ampliar honorarios y agregar cuotas conservando im
     item,
     saved: noop,
   });
-  assert.match(html, /Puedes ampliar los honorarios y agregar cuotas al final/);
+  assert.match(html, /Solo las cuotas que recibieron abonos están bloqueadas/);
   assert.equal((html.match(/readOnly=""/g) || []).length, 2);
-  assert.match(html.match(/<input[^>]*name="fee"[^>]*>/)[0], /min="1000.00"/);
+  assert.match(html.match(/<input[^>]*name="fee"[^>]*>/)[0], /min="0.01"/);
+  assert.match(html.match(/<input[^>]*name="amount_0"[^>]*>/)[0], /readOnly/);
+  assert.doesNotMatch(html.match(/<input[^>]*name="amount_1"[^>]*>/)[0], /readOnly/);
   assert.match(html, /name="due_date_0"/);
   assert.match(html, /name="due_date_1"/);
   assert.match(html, /Agregar cuota/);
-  assert.doesNotMatch(html, /Quitar cuota/);
+  assert.equal((html.match(/Quitar cuota/g) || []).length, 1);
   assert.doesNotMatch(
     html,
     /name="name"|name="document_number"|name="phone"|name="email"|name="address"/,
   );
+});
+test("un evento vinculado sin abonos permite editar importe y modalidad", () => {
+  const html = render(CaseForm, {
+    actor: admin,
+    clients: [client],
+    areas,
+    item: {
+      ...item,
+      installments: [item.installments[0], {
+        ...item.installments[1], number: 4, event_name: "Sentencia",
+        entry_id: 9, activated_at: "2026-10-08T12:00:00Z",
+      }],
+    },
+    saved: noop,
+  });
+  assert.doesNotMatch(html.match(/<input[^>]*name="amount_1"[^>]*>/)[0], /readOnly/);
+  assert.doesNotMatch(html.match(/<input[^>]*name="event_name_1"[^>]*>/)[0], /readOnly/);
+  assert.equal((html.match(/<select[^>]*disabled/g) || []).length, 1);
+  assert.match(html, /Cuota 4 · importe/);
 });
 test("editar un caso a Retirado conserva el cliente y las cuotas sin reenviar datos personales", async () => {
   const calls = capture(item);

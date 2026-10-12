@@ -28,9 +28,10 @@ export default function CaseForm({
   saved,
 }: Props) {
   const isAdmin = actor.role === "admin";
-  const hasPayments = !!item?.payments?.length;
-  const planLocked =
-    hasPayments || !!item?.installments?.some((quota) => quota.entry_id);
+  const quotaLocked = (quota: InstallmentInput) =>
+    item?.installments?.some(
+      (original) => original.id === quota.id && cents(original.paid) > 0n,
+    ) ?? false;
   const [fee, setFee] = useState(item?.fee || "");
   const [plan, setPlan] = useState<InstallmentInput[]>(
     item?.installments?.length
@@ -46,6 +47,12 @@ export default function CaseForm({
     (total, quota) => total + cents(quota.amount),
     0n,
   );
+  const quotaNumber = (quota: InstallmentInput, index: number) =>
+    item?.installments?.find((original) => original.id === quota.id)?.number ??
+    Math.max(
+      0,
+      ...(item?.installments?.map((original) => original.number) ?? []),
+    ) + plan.slice(0, index + 1).filter((row) => row.id == null).length;
   function changeQuota(index: number, change: Partial<InstallmentInput>) {
     setPlan((current) =>
       current.map((quota, position) =>
@@ -177,14 +184,14 @@ export default function CaseForm({
             <input
               name="fee"
               type="number"
-              min={planLocked ? (item?.fee ?? "0.01") : "0.01"}
+              min="0.01"
               step="0.01"
               required
               value={fee}
               onChange={(event) => {
                 const value = event.target.value;
                 setFee(value);
-                if (plan.length === 1 && !planLocked)
+                if (plan.length === 1 && !quotaLocked(plan[0]))
                   changeQuota(0, { amount: value });
               }}
             />
@@ -192,11 +199,12 @@ export default function CaseForm({
           <p className="muted self-center">
             Total de cuotas: {money(Number(planTotal) / 100)}
           </p>
-          {planLocked && (
+          {item && (
             <p className="full notice">
-              Puedes ampliar los honorarios y agregar cuotas al final. Las
-              cuotas existentes conservan sus importes y eventos; puedes
-              corregir las fechas de cuotas por fecha.
+              Solo las cuotas que recibieron abonos están bloqueadas. Puedes
+              modificar las demás y ajustar los honorarios al nuevo total.
+              Cambiar el evento o pasar a fecha desvincula la actuación
+              anterior.
             </p>
           )}
           <div className="full">
@@ -205,7 +213,9 @@ export default function CaseForm({
                 className="plan-row"
                 key={quota.id != null ? `saved-${quota.id}` : `new-${index}`}
               >
-                <Field label={`Cuota ${index + 1} · importe S/`}>
+                <Field
+                  label={`Cuota ${quotaNumber(quota, index)} · importe S/`}
+                >
                   <input
                     name={`amount_${index}`}
                     type="number"
@@ -213,7 +223,7 @@ export default function CaseForm({
                     step="0.01"
                     required
                     value={quota.amount}
-                    readOnly={planLocked && quota.id != null}
+                    readOnly={quotaLocked(quota)}
                     onChange={(event) =>
                       changeQuota(index, { amount: event.target.value })
                     }
@@ -222,7 +232,7 @@ export default function CaseForm({
                 <Field label="Se paga por">
                   <select
                     value={quota.event_name != null ? "evento" : "fecha"}
-                    disabled={planLocked && quota.id != null}
+                    disabled={quotaLocked(quota)}
                     onChange={(event) =>
                       changeQuota(
                         index,
@@ -243,10 +253,13 @@ export default function CaseForm({
                       required
                       maxLength={150}
                       value={quota.event_name}
-                      readOnly={planLocked && quota.id != null}
+                      readOnly={quotaLocked(quota)}
                       placeholder="Ej. Sentencia favorable"
                       onChange={(event) =>
-                        changeQuota(index, { event_name: event.target.value })
+                        changeQuota(index, {
+                          event_name: event.target.value,
+                          due_date: null,
+                        })
                       }
                     />
                     <small>
@@ -262,13 +275,14 @@ export default function CaseForm({
                       type="date"
                       required
                       value={quota.due_date || ""}
+                      readOnly={quotaLocked(quota)}
                       onChange={(event) =>
                         changeQuota(index, { due_date: event.target.value })
                       }
                     />
                   </Field>
                 )}
-                {(!planLocked || quota.id == null) && plan.length > 1 && (
+                {!quotaLocked(quota) && plan.length > 1 && (
                   <button
                     className="secondary"
                     type="button"

@@ -246,35 +246,56 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
             d.validate_plan(fee, plan)
         elif sum((x.amount for x in current), d.ZERO) != fee:
             raise HTTPException(422, "Actualiza también las cuotas para que sumen los honorarios")
-        linked = db.scalar(select(m.Entry.id).where(m.Entry.tenant_id == user.tenant_id,
-            m.Entry.case_id == key, m.Entry.payment_installment_id.is_not(None))) is not None
-        if d.payments(db, user, key) or linked:
-            preserved = plan[:len(current)] if plan is not None else current
-            added = plan[len(current):] if plan is not None else []
-            if ([(x.id, x.amount, x.event_name) for x in preserved] != [(x.id, x.amount, x.event_name) for x in current]
-                    or any(x.id is not None for x in added)
-                    or fee != row.fee + sum((x.amount for x in added), d.ZERO)):
-                raise HTTPException(422, "Con abonos o actuaciones vinculadas conserva las cuotas existentes y agrega las nuevas al final, aumentando los honorarios por su importe")
-            for old, new in zip(current, preserved):
-                if old.event_name is not None and old.due_date != new.due_date:
+        if plan is not None:
+            by_id = {x.id: x for x in current}
+            requested = [x.id for x in plan if x.id is not None]
+            if len(set(requested)) != len(requested) or any(x not in by_id for x in requested):
+                raise HTTPException(422, "Las cuotas deben pertenecer a esta ficha y no repetirse")
+            first_new = next((i for i, x in enumerate(plan) if x.id is None), len(plan))
+            if requested != [x.id for x in current if x.id in requested] or any(
+                    x.id is not None for x in plan[first_new:]):
+                raise HTTPException(422, "Conserva el orden de las cuotas y agrega las nuevas al final")
+            submitted = {x.id: x for x in plan if x.id is not None}
+            for old in current:
+                new = submitted.get(old.id)
+                if d.paid(db, user, old.id) > d.ZERO and (new is None or
+                        (old.amount, old.due_date, old.event_name) != (new.amount, new.due_date, new.event_name)):
+                    raise HTTPException(422, "No puedes modificar ni retirar una cuota que ya recibió un abono")
+            for old in current:
+                new = submitted.get(old.id)
+                if new is not None and (old.amount, old.due_date, old.event_name) == (new.amount, new.due_date, new.event_name):
+                    continue
+                previous = d.public(old)
+                changed_event = new is None or old.event_name != new.event_name
+                if new is not None and new.event_name is not None and (
+                        changed_event or old.activated_at is None) and new.due_date is not None:
+                    raise HTTPException(422, "Una cuota por evento se activa desde la bitácora")
+                if new is not None and not changed_event and old.event_name is not None and old.due_date != new.due_date:
                     raise HTTPException(422, "La fecha de una cuota por evento se activa al atender su actuación")
-                if old.due_date != new.due_date:
-                    d.cancel_notices(db, user, f"payment:{old.id}")
-                    old.due_date = new.due_date
-            for number, item in enumerate(added, len(current) + 1):
+                if changed_event:
+                    entry = db.scalar(select(m.Entry).where(m.Entry.tenant_id == user.tenant_id,
+                        m.Entry.case_id == key, m.Entry.payment_installment_id == old.id))
+                    if entry is not None:
+                        entry_before = d.public(entry)
+                        entry.payment_installment_id = None
+                        d.audit(db, user, entry, "Desvincular cuota modificada", entry_before)
+                        db.flush()
+                d.cancel_notices(db, user, f"payment:{old.id}")
+                if new is None:
+                    d.audit(db, user, old, "Retirar cuota sin abonos", previous)
+                    db.delete(old)
+                else:
+                    old.amount, old.due_date, old.event_name = new.amount, new.due_date, new.event_name
+                    if changed_event:
+                        old.activated_at = None
+                    d.audit(db, user, old, "Modificar cuota sin abonos", previous)
+            number = max((x.number for x in current), default=0)
+            for item in plan:
+                if item.id is not None:
+                    continue
                 if item.event_name is not None and item.due_date is not None:
                     raise HTTPException(422, "Una cuota por evento se activa desde la bitácora")
-                db.add(m.Installment(tenant_id=user.tenant_id, case_id=key, number=number, amount=item.amount,
-                    due_date=item.due_date, event_name=item.event_name))
-        elif plan is not None:
-            if any(item.id is not None and item.id not in {x.id for x in current} for item in plan):
-                raise HTTPException(422, "Las cuotas deben pertenecer a esta ficha")
-            for item in current:
-                d.cancel_notices(db, user, f"payment:{item.id}")
-            db.execute(delete(m.Installment).where(m.Installment.tenant_id == user.tenant_id, m.Installment.case_id == key))
-            for number, item in enumerate(plan, 1):
-                if item.event_name is not None and item.due_date is not None:
-                    raise HTTPException(422, "Una cuota por evento se activa desde la bitácora")
+                number += 1
                 db.add(m.Installment(tenant_id=user.tenant_id, case_id=key, number=number, amount=item.amount,
                     due_date=item.due_date, event_name=item.event_name))
         row.fee = fee

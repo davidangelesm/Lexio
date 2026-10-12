@@ -69,7 +69,7 @@ def test_case_can_add_date_and_event_charges_after_partial_payment(setup):
     assert final["balance"] == "200.00"
 
 
-@pytest.mark.parametrize("change", ["remove", "reorder", "amount", "event", "duplicate", "foreign", "total"])
+@pytest.mark.parametrize("change", ["remove", "reorder", "amount", "event", "date", "duplicate", "foreign", "total"])
 def test_extension_rejects_changes_to_protected_plan_without_writes(setup, change):
     client, headers, _, _ = setup
     case = event_case(setup)
@@ -88,7 +88,9 @@ def test_extension_rejects_changes_to_protected_plan_without_writes(setup, chang
     elif change == "amount":
         plan[0]["amount"], plan[1]["amount"] = "400.00", "600.00"
     elif change == "event":
-        plan[1]["event_name"] = "Otro hito"
+        plan[0].update(event_name="Otro hito", due_date=None)
+    elif change == "date":
+        plan[0]["due_date"] = "2026-10-16"
     elif change == "duplicate":
         plan[2]["id"] = plan[0]["id"]
     elif change == "foreign":
@@ -110,6 +112,59 @@ def test_linked_event_without_payments_can_extend_plan(setup):
     response = client.put(f"/cases/{case['id']}", headers=headers[0], json={"fee": "1100.00", "installments": plan})
     assert response.status_code == 200, response.text
     assert response.json()["installments"][1]["entry_id"] == entry["id"]
+
+
+@pytest.mark.parametrize("attended", [False, True])
+def test_unpaid_quota_can_change_amount_and_modality_despite_other_payments(setup, attended):
+    client, headers, _, engine = setup
+    case = event_case(setup)
+    entry = link_entry(client, headers[0], case)
+    if attended:
+        assert client.post(f"/entries/{entry['id']}/attend", headers=headers[0]).status_code == 200
+    assert abono(client, headers[0], case, "200.00").status_code == 201
+    path = f"/cases/{case['id']}"
+    before = client.get(path, headers=headers[0]).json()
+    plan = [{"id": x["id"], "amount": x["amount"], "due_date": x["due_date"],
+        "event_name": x["event_name"]} for x in before["installments"]]
+    plan[1].update(amount="300.00", event_name=None, due_date="2026-10-15")
+    response = client.put(path, headers=headers[0], json={"fee": "800.00", "installments": plan})
+    assert response.status_code == 200, response.text
+    updated = response.json()
+    assert updated["balance"] == "600.00" and updated["payments"] == before["payments"]
+    assert updated["installments"][0] == before["installments"][0]
+    quota = updated["installments"][1]
+    assert quota["id"] == case["installments"][1]["id"]
+    assert quota["event_name"] is None and quota["activated_at"] is None and quota["entry_id"] is None
+    with Session(engine) as db:
+        assert db.get(m.Entry, entry["id"]).attended == attended
+        assert db.get(m.Entry, entry["id"]).payment_installment_id is None
+    plan[1].update(amount="600.00", event_name="Nuevo hito", due_date=None)
+    response = client.put(path, headers=headers[0], json={"fee": "1100.00", "installments": plan})
+    assert response.status_code == 200, response.text
+    assert response.json()["installments"][1]["state"] == "esperando_evento"
+    assert client.get("/dashboard", headers=headers[0]).json()["upcoming_payments"] == []
+
+
+def test_editing_unpaid_event_amount_keeps_activated_link_and_can_remove_only_unpaid(setup):
+    client, headers, _, engine = setup
+    case = event_case(setup)
+    entry = link_entry(client, headers[0], case)
+    assert client.post(f"/entries/{entry['id']}/attend", headers=headers[0]).status_code == 200
+    assert abono(client, headers[0], case, "200.00").status_code == 201
+    path = f"/cases/{case['id']}"
+    before = client.get(path, headers=headers[0]).json()
+    plan = [{"id": x["id"], "amount": x["amount"], "due_date": x["due_date"],
+        "event_name": x["event_name"]} for x in before["installments"]]
+    plan[1]["amount"] = "700.00"
+    response = client.put(path, headers=headers[0], json={"fee": "1200.00", "installments": plan})
+    assert response.status_code == 200, response.text
+    quota = response.json()["installments"][1]
+    assert quota["entry_id"] == entry["id"] and quota["activated_at"] == before["installments"][1]["activated_at"]
+    assert client.put(path, headers=headers[0], json={"fee": "500.00", "installments": plan[:1]}).status_code == 200
+    with Session(engine) as db:
+        assert db.get(m.Installment, quota["id"]) is None
+        assert db.get(m.Entry, entry["id"]).attended
+    assert client.get(path, headers=headers[0]).json()["balance"] == "300.00"
 
 
 def test_existing_dated_quota_can_be_converted_to_event_and_activated(setup):
@@ -230,7 +285,9 @@ def test_link_can_change_before_attendance_but_never_rewrites_activated_event(se
     assert client.put(f"/cases/{case['id']}", headers=headers[0], json={"installments": plan}).status_code == 200
     plan[1]["due_date"] = "2026-10-10"
     assert client.put(f"/cases/{case['id']}", headers=headers[0], json={"installments": plan}).status_code == 422
-    assert client.put(f"/cases/{case['id']}", headers=headers[0], json={"installments": [plan[0]], "fee": "500.00"}).status_code == 422
+    assert client.put(f"/cases/{case['id']}", headers=headers[0], json={"installments": [plan[0]], "fee": "500.00"}).status_code == 200
+    with Session(setup[3]) as db:
+        assert db.get(m.Entry, entry["id"]).payment_installment_id is None
 
 
 def test_event_activation_on_weekend_is_immediate_and_prepaid_event_creates_no_cobranza(setup, monkeypatch):
