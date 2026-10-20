@@ -7,9 +7,12 @@ se realizó o registró la gestión y no determina el cobro.
 
 Desde que se vincula a una actuación con fecha de alerta, el saldo impago aparece
 en Inicio → Alerta de cobros si vence en los próximos 30 días o ya está vencido.
-Los avisos de actuación y cobro usan los mismos plazos: 5, 3 y 1 días hábiles,
+Los avisos de actuación y cobro usan los mismos plazos: 5, 3, 2 y 1 días hábiles,
 además del vencimiento. En fines de semana se conservan avisos existentes sin
 crear nuevos. Solo el administrador recibe información financiera.
+
+El plazo de 2 días hábiles se agregó para prueba por pedido de David el 20 de
+octubre de 2026; los demás plazos se conservan.
 
 Reprogramar o retirar la fecha de alerta actualiza el vencimiento de la cuota y
 cancela los avisos anteriores para todos los destinatarios, con auditoría.

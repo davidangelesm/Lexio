@@ -525,7 +525,7 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
     if current.weekday() < 5:
         for source, data in sources.items():
             target = data["target_date"]
-            for anticipation in (5, 3, 1, 0):
+            for anticipation in (5, 3, 2, 1, 0):
                 when = d.shift(target, -anticipation)
                 if when > current:
                     continue

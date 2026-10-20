@@ -23,6 +23,7 @@ def linked(setup, **changes):
 
 @pytest.mark.parametrize("current,anticipation", [
     (date(2026, 10, 15), 5), (date(2026, 10, 19), 3),
+    (date(2026, 10, 20), 2),
     (date(2026, 10, 21), 1), (date(2026, 10, 22), 0),
 ])
 def test_event_and_collection_share_deadline_and_anticipations(setup, monkeypatch, current, anticipation):
