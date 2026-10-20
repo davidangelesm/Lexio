@@ -86,17 +86,19 @@ def test_collection_security_validation_and_protected_plan(setup):
     assert client.get("/reports", headers=headers[2]).json()["totals"]["uncollectible"] == "0.00"
 
 
-def test_uncollectible_event_activation_keeps_history_without_collection_notice(setup):
+def test_uncollectible_event_keeps_scheduled_date_without_collection_notice(setup):
     client, headers, ids, _ = setup
     case = create(setup, team_member_id=ids[1], installments=[{"amount": "1000.00", "event_name": "Sentencia"}])
     quota_id = case["installments"][0]["id"]
     entry = client.post(f"/cases/{case['id']}/entries", headers=headers[0], json={
         "action_date": "2026-10-08", "subject": "Sentencia", "description": "Hito", "payment_installment_id": quota_id,
+        "alert_date": "2026-10-22",
     }).json()
     client.put(f"/installments/{quota_id}/collection", headers=headers[0], json={"reason": "Cliente insolvente"})
     assert client.post(f"/entries/{entry['id']}/attend", headers=headers[1]).status_code == 200
     current = client.get(f"/cases/{case['id']}", headers=headers[0]).json()
     assert current["installments"][0]["activated_at"] and current["installments"][0]["state"] == "incobrable"
+    assert current["installments"][0]["due_date"] == "2026-10-22"
     assert client.get("/alerts", headers=headers[0]).json() == []
     assert client.get("/dashboard", headers=headers[0]).json()["upcoming_payments"] == []
     assert current["balance"] == "0.00" and current["uncollectible"] == "1000.00"

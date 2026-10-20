@@ -72,8 +72,8 @@ export default function EntryTable({
                         <small>
                           Pago por evento: {entry.payment_event} ·{" "}
                           {entry.payment_activated
-                            ? "Cobranza activada"
-                            : "Se activa al atender"}
+                            ? "Vence con la alerta de la actuación"
+                            : "Esperando fecha de alerta"}
                         </small>
                       )}
                     </td>

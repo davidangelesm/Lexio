@@ -96,13 +96,13 @@ export default function EntryForm({
       </div>
       {actor.role === "admin" && events.length > 0 && (
         <div className="full rounded-lg border border-[#e0e7e2] bg-[#f8faf9] p-4">
-          <Field label="Cláusula de pago que activa esta actuación (opcional)">
+          <Field label="Cuota por evento vinculada (opcional)">
             <select
               name="payment_installment_id"
               defaultValue={item?.payment_installment_id || ""}
               disabled={item?.attended}
             >
-              <option value="">No activa una cuota</option>
+              <option value="">Sin cuota vinculada</option>
               {events.map((quota) => (
                 <option key={quota.id} value={quota.id}>
                   Cuota {quota.number} · {quota.event_name}
@@ -111,8 +111,10 @@ export default function EntryForm({
             </select>
           </Field>
           <p className="muted mt-2 mb-0 text-xs">
-            Al marcar esta actuación como atendida, la cuota será exigible ese
-            mismo día y aparecerá en cobranza.
+            La cuota vence en la fecha de alerta de esta actuación y genera
+            recordatorios de cobro a 5, 3 y 1 días hábiles. Si cambias esa fecha,
+            el vencimiento de la cuota se actualiza. Sin fecha de alerta, queda
+            esperando fecha.
           </p>
         </div>
       )}

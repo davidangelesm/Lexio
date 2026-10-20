@@ -13,7 +13,7 @@ La ficha integral define los datos del sistema. Se registran en vistas separadas
 
 Las alertas se consultan en Inicio; se retiró la página separada de Alertas y vencimientos. Los avisos se anticipan 5, 3 y 1 días hábiles (lunes a viernes, sin feriados) y cada asunto muestra solo su aviso más reciente, conservando la fecha límite original. Leer descarta ese recordatorio hasta el siguiente; Atendido completa asuntos Legal y Otro con permiso de edición. Un vencimiento pendiente pasa a urgente después de su fecha. Los cobros se resuelven al pagar la cuota. Corregir asunto, tipo o descripción conserva los avisos leídos.
 
-Cada caso tiene un único total de honorarios y cuotas por fecha. Las cuotas suman el total pactado. Registrar un abono lo aplica automáticamente a la primera cuota pendiente y después a las siguientes por número; opcionalmente se puede elegir otra cuota inicial. No hay créditos separados, servicios, eventos de pago ni confirmaciones adicionales. El saldo exigible es honorarios menos abonos e importes pendientes marcados incobrables; concluir un caso conserva la deuda.
+Cada caso tiene un único total de honorarios y cuotas por fecha o evento/hito. Las cuotas por evento vencen en la fecha de alerta de su actuación vinculada y comparten sus recordatorios, sin esperar a marcarla como atendida. Las cuotas suman el total pactado. Registrar un abono lo aplica automáticamente a la primera cuota pendiente y después a las siguientes por número; opcionalmente se puede elegir otra cuota inicial. No hay créditos separados, servicios ni confirmaciones adicionales. El saldo exigible es honorarios menos abonos e importes pendientes marcados incobrables; concluir un caso conserva la deuda.
 
 En la vista de un caso activo, **Concluir caso** permite cerrar su atención con una confirmación breve. Está disponible para quienes tienen permiso de edición; conserva el historial y los avisos y cobros pendientes. El cierre usa el estado y la auditoría existentes, sin una migración adicional.
 
@@ -29,7 +29,12 @@ Un asistente con permiso de alta puede consultar su cliente recién registrado p
 
 Todas las tablas tienen `tenant_id`. El servidor obtiene el estudio del JWT validado y verifica usuario activo y relaciones del mismo estudio. El frontend nunca envía el estudio para establecer identidad ni recibe credenciales de MySQL. El JWT permanece en memoria; cerrar o recargar exige iniciar sesión.
 
+Para actualizar las cuotas por evento ya vinculadas, revisar el [procedimiento de sincronización de vencimientos](database/EVENT_INSTALLMENTS.md#actualizar-vínculos-existentes-al-nuevo-vencimiento-compartido). No requiere cambios adicionales de esquema; la actualización de datos se simula por defecto y su aplicación queda pendiente de revisión humana.
+
+
 ## Actualización desde el modelo anterior
+
+Para limpiar los datos de ejemplo antes de entregar el programa, usar [cleanup_demo_data.sql](database/cleanup_demo_data.sql) en HeidiSQL con la base correcta seleccionada. Conserva la cuenta `Admin` (incluida su contraseña), su estudio y sus ramas jurídicas; elimina las demás cuentas del estudio, incluida `asistente1`, y todos sus clientes, casos, actuaciones, accesos, cuotas, abonos, aplicaciones, avisos y auditoría. Otros estudios se conservan. El archivo primero simula y revierte los borrados con `0`: revisar el estudio y las cantidades, guardar un respaldo y pausar el backend; para aplicar, cambiar a `1` (sin comillas) en la llamada final y ejecutar el archivo completo. Ante errores, revierte la transacción. No reinicia IDs ni modifica las tablas de la aplicación.
 
 Para gestionar cuotas incobrables, revisar y aplicar [007_uncollectible_installments.sql](database/007_uncollectible_installments.sql) antes de desplegar el backend compatible. Conserva los registros existentes; no se aplicó desde esta revisión. Ver [reglas de cobranza y saldo](database/UNCOLLECTIBLE_INSTALLMENTS.md). El administrador puede marcar una cuota con motivo y reactivarla; el saldo incobrable se conserva, se distingue en reportes y se excluye de avisos y nuevos abonos.
 

@@ -274,7 +274,7 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
                         changed_event or old.activated_at is None) and new.due_date is not None:
                     raise HTTPException(422, "Una cuota por evento se activa desde la bitácora")
                 if new is not None and not changed_event and old.event_name is not None and old.due_date != new.due_date:
-                    raise HTTPException(422, "La fecha de una cuota por evento se activa al atender su actuación")
+                    raise HTTPException(422, "La fecha de una cuota por evento se toma de la alerta de su actuación")
                 if changed_event:
                     entry = db.scalar(select(m.Entry).where(m.Entry.tenant_id == user.tenant_id,
                         m.Entry.case_id == key, m.Entry.payment_installment_id == old.id))
@@ -377,6 +377,8 @@ def create_entry(key: int, data: s.EntryIn, db: Db, user: Actor) -> dict[str, An
     row = m.Entry(tenant_id=user.tenant_id, case_id=key, registered_by=user.id, **data.model_dump())
     db.add(row)
     d.audit(db, user, row, "Registrar actuación")
+    if row.payment_installment_id is not None:
+        d.sync_entry_payment(db, user, row.payment_installment_id, row.alert_date)
     d.save(db)
     return d.entry_view(db, user, row)
 
@@ -389,6 +391,8 @@ def update_entry(key: int, data: s.EntryIn, db: Db, user: Actor) -> dict[str, An
     link = data.payment_installment_id if "payment_installment_id" in data.model_fields_set else row.payment_installment_id
     d.validate_entry_payment(db, user, row.case_id, link, row)
     before = d.public(row)
+    if row.payment_installment_id is not None and row.payment_installment_id != link:
+        d.sync_entry_payment(db, user, row.payment_installment_id, None)
     if row.alert_date != data.alert_date:
         d.cancel_notices(db, user, f"legal:{row.id}")
         if data.alert_date is not None and not row.attended:
@@ -400,6 +404,8 @@ def update_entry(key: int, data: s.EntryIn, db: Db, user: Actor) -> dict[str, An
     for name, value in data.model_dump(exclude={"payment_installment_id"}).items():
         setattr(row, name, value)
     row.payment_installment_id = link
+    if link is not None:
+        d.sync_entry_payment(db, user, link, row.alert_date)
     d.audit(db, user, row, "Editar actuación", before)
     d.save(db)
     return d.entry_view(db, user, row)
@@ -417,19 +423,6 @@ def attend_entry(key: int, db: Db, user: Actor) -> dict[str, Any]:
         row.attended = True
         d.cancel_notices(db, user, f"legal:{row.id}")
         d.audit(db, user, row, "Marcar atendido", before)
-        if row.payment_installment_id is not None:
-            quota = d.get(db, m.Installment, row.payment_installment_id, user, lock=True)
-            if quota.activated_at is None:
-                previous = d.public(quota)
-                quota.due_date = d.today()
-                quota.activated_at = m.now()
-                d.audit(db, user, quota, "Activar cuota por evento", previous)
-                if quota.uncollectible_reason is None and quota.amount > d.paid(db, user, quota.id):
-                    for recipient in db.scalars(select(m.User).where(m.User.tenant_id == user.tenant_id,
-                            m.User.role == "admin", m.User.active.is_(True))):
-                        db.add(m.Notice(tenant_id=user.tenant_id, user_id=recipient.id, case_id=row.case_id,
-                            source_key=f"payment:{quota.id}:{quota.due_date.isoformat()}:0", kind="pago",
-                            target_date=quota.due_date, notice_date=quota.due_date, anticipation=0))
         d.save(db)
     return d.entry_view(db, user, row)
 
@@ -532,7 +525,7 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
     if current.weekday() < 5:
         for source, data in sources.items():
             target = data["target_date"]
-            for anticipation in ((0,) if data.get("event_name") else (5, 3, 1, 0)):
+            for anticipation in (5, 3, 1, 0):
                 when = d.shift(target, -anticipation)
                 if when > current:
                     continue

@@ -178,8 +178,8 @@ export default function CaseForm({
           <div className="full form-section">
             <h3>Control financiero</h3>
             <p>
-              Indica el total pactado y si cada cuota se paga por fecha o al
-              cumplir un evento.
+              Indica el total pactado y si cada cuota vence en una fecha fija o
+              en la fecha de alerta de una actuación vinculada a un evento.
             </p>
           </div>
           <Field label="Honorarios totales S/">
@@ -249,7 +249,7 @@ export default function CaseForm({
                   </select>
                 </Field>
                 {quota.event_name != null ? (
-                  <Field label="Evento que activa el pago">
+                  <Field label="Evento / hito del pago">
                     <input
                       name={`event_name_${index}`}
                       required
@@ -266,8 +266,8 @@ export default function CaseForm({
                     />
                     <small>
                       {quota.due_date
-                        ? `Activado: ${quota.due_date}`
-                        : "Vincula una actuación en Bitácora. Se cobra al marcarla como atendida."}
+                        ? `Vencimiento: ${quota.due_date}`
+                        : "Vincula una actuación con fecha de alerta en Bitácora para programar el cobro."}
                     </small>
                   </Field>
                 ) : (

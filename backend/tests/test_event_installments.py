@@ -20,7 +20,7 @@ def event_case(setup, **changes):
 
 def entry_data(**changes):
     return {"action_date": "2026-10-08", "subject": "Obtener sentencia",
-        "description": "Verificar el hito pactado", **changes}
+        "description": "Verificar el hito pactado", "alert_date": "2026-10-08", **changes}
 
 
 def link_entry(client, header, case):
@@ -62,7 +62,7 @@ def test_case_can_add_date_and_event_charges_after_partial_payment(setup):
     assert event_entry.status_code == 201
     assert client.post(f"/entries/{event_entry.json()['id']}/attend", headers=headers[1]).status_code == 200
     assert {x["id"] for x in client.get("/dashboard", headers=headers[0]).json()["upcoming_payments"]} == {
-        updated["installments"][2]["id"], new_event["id"]}
+        updated["installments"][1]["id"], updated["installments"][2]["id"], new_event["id"]}
     assert abono(client, headers[0], updated, "1100.00").status_code == 201
     final = client.get(path, headers=headers[0]).json()
     assert [x["paid"] for x in final["installments"]] == ["500.00", "500.00", "300.00", "0.00"]
@@ -106,8 +106,9 @@ def test_linked_event_without_payments_can_extend_plan(setup):
     client, headers, _, _ = setup
     case = event_case(setup)
     entry = link_entry(client, headers[0], case)
+    current = client.get(f"/cases/{case['id']}", headers=headers[0]).json()
     plan = [{"id": x["id"], "amount": x["amount"], "due_date": x["due_date"],
-        "event_name": x["event_name"]} for x in case["installments"]]
+        "event_name": x["event_name"]} for x in current["installments"]]
     plan.append({"amount": "100.00", "event_name": "Apelación"})
     response = client.put(f"/cases/{case['id']}", headers=headers[0], json={"fee": "1100.00", "installments": plan})
     assert response.status_code == 200, response.text
@@ -190,7 +191,7 @@ def test_existing_dated_quota_can_be_converted_to_event_and_activated(setup):
     assert next(item for item in payments if item["id"] == converted["id"])["due_date"] == "2026-10-08"
 
 
-def test_event_quota_waits_until_attended_then_activates_once_and_is_payable(setup, monkeypatch):
+def test_event_quota_is_due_before_attendance_and_attending_preserves_collection(setup, monkeypatch):
     client, headers, ids, engine = setup
     case = event_case(setup, team_member_id=ids[1])
     quota = case["installments"][1]
@@ -199,7 +200,9 @@ def test_event_quota_waits_until_attended_then_activates_once_and_is_payable(set
     assert client.get("/dashboard", headers=headers[0]).json()["upcoming_payments"] == []
     assert client.get("/alerts", headers=headers[0]).json() == []
     entry = link_entry(client, headers[0], case)
-    assert entry["can_attend"] and entry["alert_date"] is None
+    assert entry["can_attend"] and entry["alert_date"] == "2026-10-08"
+    assert len(client.get("/dashboard", headers=headers[0]).json()["upcoming_payments"]) == 1
+    assert {x["kind"] for x in client.get("/alerts", headers=headers[0]).json()} == {"legal", "pago"}
     staff = client.get(f"/cases/{case['id']}/entries", headers=headers[1]).json()[0]
     assert staff["can_attend"]
     assert not {"payment_installment_id", "payment_event", "payment_activated"} & staff.keys()
@@ -221,8 +224,8 @@ def test_event_quota_waits_until_attended_then_activates_once_and_is_payable(set
     repeated = client.get(f"/cases/{case['id']}", headers=headers[0]).json()["installments"][1]
     assert repeated["due_date"] == activated["due_date"] and repeated["activated_at"] == activated["activated_at"]
     with Session(engine) as db:
-        audits = list(db.scalars(select(m.Audit).where(m.Audit.action == "Activar cuota por evento")))
-        assert len(audits) == 1 and audits[0].user_id == ids[1]
+        audits = list(db.scalars(select(m.Audit).where(m.Audit.action == "Sincronizar vencimiento de cuota")))
+        assert len(audits) == 1 and audits[0].user_id == ids[0]
         assert json.loads(audits[0].changes)["after"]["due_date"] == "2026-10-08"
     assert abono(client, headers[0], case, "500.00", installment_id=quota["id"]).status_code == 201
     assert client.get("/dashboard", headers=headers[0]).json()["upcoming_payments"] == []
@@ -290,19 +293,17 @@ def test_link_can_change_before_attendance_but_never_rewrites_activated_event(se
         assert db.get(m.Entry, entry["id"]).payment_installment_id is None
 
 
-def test_event_activation_on_weekend_is_immediate_and_prepaid_event_creates_no_cobranza(setup, monkeypatch):
+def test_event_on_weekend_creates_no_notices_and_prepaid_event_creates_no_cobranza(setup, monkeypatch):
     client, headers, _, _ = setup
+    monkeypatch.setattr(d, "today", lambda: date(2026, 10, 10))
     case = event_case(setup)
     entry = link_entry(client, headers[0], case)
-    monkeypatch.setattr(d, "today", lambda: date(2026, 10, 10))
     assert client.post(f"/entries/{entry['id']}/attend", headers=headers[0]).status_code == 200
-    assert len(client.get("/alerts", headers=headers[0]).json()) == 1
-    assert client.get("/dashboard", headers=headers[0]).json()["upcoming_payments"][0]["due_date"] == "2026-10-10"
-    prepaid = event_case(setup, document="88888888")
-    paid_entry = link_entry(client, headers[0], prepaid)
-    assert abono(client, headers[0], prepaid, "500.00", installment_id=prepaid["installments"][1]["id"]).status_code == 201
-    assert client.post(f"/entries/{paid_entry['id']}/attend", headers=headers[0]).status_code == 200
-    assert len(client.get("/alerts", headers=headers[0]).json()) == 1
+    assert client.get("/alerts", headers=headers[0]).json() == []
+    assert client.get("/dashboard", headers=headers[0]).json()["upcoming_payments"][0]["due_date"] == "2026-10-08"
+    assert abono(client, headers[0], case, "500.00", installment_id=case["installments"][1]["id"]).status_code == 201
+    monkeypatch.setattr(d, "today", lambda: date(2026, 10, 12))
+    assert client.get("/alerts", headers=headers[0]).json() == []
 
 
 def test_database_rejects_links_across_cases_and_tenants(setup):

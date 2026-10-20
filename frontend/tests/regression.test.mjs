@@ -980,7 +980,7 @@ test("una actuación vinculada sin alerta procesal puede atenderse sin exponer f
     load: noop,
   });
   assert.match(html, /Marcar atendido/);
-  assert.match(html, /Se activa al atender/);
+  assert.match(html, /Esperando fecha de alerta/);
   assert.doesNotMatch(
     render(EntryTable, {
       entries: [{ ...entry, attended: true, payment_activated: true }],

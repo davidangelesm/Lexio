@@ -286,8 +286,8 @@ export default function CaseWorkspace({
                                 <strong>{quota.event_name}</strong>
                                 <small>
                                   {quota.due_date
-                                    ? `Exigible desde ${dateLabel(quota.due_date)}`
-                                    : "Al atender la actuación vinculada"}
+                                    ? `Vence el ${dateLabel(quota.due_date)}`
+                                    : "Esperando fecha de alerta de la actuación"}
                                 </small>
                                 {!quota.entry_id && (
                                   <small>

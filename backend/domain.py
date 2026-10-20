@@ -206,6 +206,22 @@ def entry_view(db: Session, user: m.User, item: m.Entry) -> dict[str, Any]:
     return data
 
 
+def sync_entry_payment(db: Session, user: m.User, installment_id: int, due_date: date | None) -> None:
+    quota = get(db, m.Installment, installment_id, user, lock=True)
+    if quota.due_date == due_date:
+        return
+    before = public(quota)
+    quota.due_date = due_date
+    quota.activated_at = (quota.activated_at or m.now()) if due_date is not None else None
+    cancel_notices(db, user, f"payment:{quota.id}")
+    if due_date is not None:
+        db.execute(update(m.Notice).where(
+            m.Notice.tenant_id == user.tenant_id,
+            m.Notice.source_key.startswith(f"payment:{quota.id}:{due_date.isoformat()}:", autoescape=True),
+        ).values(status="pendiente", read_at=None))
+    audit(db, user, quota, "Sincronizar vencimiento de cuota", before)
+
+
 def validate_entry_payment(db: Session, user: m.User, case_id: int, installment_id: int | None,
         entry: m.Entry | None = None) -> None:
     previous = entry.payment_installment_id if entry else None
