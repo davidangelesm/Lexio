@@ -521,11 +521,14 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
             case = cases[data["case_id"]]
             received = sum((p.amount for p in d.payments(db, user, case.id)), d.ZERO)
             data["balance"] = case.fee - received - d.uncollectible_amount(db, user, case.id) if case.fee is not None else None
-    existing = {x.source_key: x for x in db.scalars(select(m.Notice).where(m.Notice.tenant_id == user.tenant_id, m.Notice.user_id == user.id))}
+    existing = {x.source_key: x for x in db.scalars(select(m.Notice).where(
+        m.Notice.tenant_id == user.tenant_id, m.Notice.user_id == user.id,
+        m.Notice.anticipation.in_((5, 3, 1, 0)),
+    ))}
     if current.weekday() < 5:
         for source, data in sources.items():
             target = data["target_date"]
-            for anticipation in (5, 3, 2, 1, 0):
+            for anticipation in (5, 3, 1, 0):
                 when = d.shift(target, -anticipation)
                 if when > current:
                     continue

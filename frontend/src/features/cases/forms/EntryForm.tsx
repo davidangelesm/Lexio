@@ -112,7 +112,7 @@ export default function EntryForm({
           </Field>
           <p className="muted mt-2 mb-0 text-xs">
             La cuota vence en la fecha de alerta de esta actuación y genera
-            recordatorios de cobro a 5, 3, 2 y 1 días hábiles. Si cambias esa fecha,
+            recordatorios de cobro a 5, 3 y 1 días hábiles. Si cambias esa fecha,
             el vencimiento de la cuota se actualiza. Sin fecha de alerta, queda
             esperando fecha.
           </p>

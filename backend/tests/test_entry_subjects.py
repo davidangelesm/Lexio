@@ -59,7 +59,6 @@ def test_other_alert_read_next_reminder_urgent_and_attend(setup, monkeypatch):
         json=entry_data(subject="Enviar documentos", subject_type="otro")).json()
     assert entry["can_attend"] is True
     for when, anticipation in [(date(2026, 10, 8), 5), (date(2026, 10, 12), 3),
-            (date(2026, 10, 13), 2),
             (date(2026, 10, 14), 1), (date(2026, 10, 15), 0)]:
         monkeypatch.setattr(d, "today", lambda when=when: when)
         notices = entry_alerts(client, headers[1])
@@ -78,7 +77,7 @@ def test_other_alert_read_next_reminder_urgent_and_attend(setup, monkeypatch):
     assert entry_alerts(client, headers[1]) == [] and entry_alerts(client, headers[0]) == []
     with Session(engine) as db:
         notices = list(db.scalars(select(m.Notice).where(m.Notice.kind == "otro")))
-        assert len(notices) == 5 and all(x.status == "cancelado" for x in notices)
+        assert len(notices) == 4 and all(x.status == "cancelado" for x in notices)
 
 
 def test_subject_and_type_edits_preserve_read_notices_and_next_reminder(setup, monkeypatch):

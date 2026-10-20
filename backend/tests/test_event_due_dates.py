@@ -23,7 +23,7 @@ def linked(setup, **changes):
 
 @pytest.mark.parametrize("current,anticipation", [
     (date(2026, 10, 15), 5), (date(2026, 10, 19), 3),
-    (date(2026, 10, 20), 2),
+    (date(2026, 10, 20), 3),
     (date(2026, 10, 21), 1), (date(2026, 10, 22), 0),
 ])
 def test_event_and_collection_share_deadline_and_anticipations(setup, monkeypatch, current, anticipation):
@@ -121,3 +121,23 @@ def test_two_event_quotas_follow_their_own_entries_and_payment_only_clears_colle
     assert len(notices) == 3
     assert [x["target_date"] for x in notices if x["kind"] == "pago"] == ["2026-10-23"]
     assert len([x for x in notices if x["kind"] == "legal"]) == 2
+
+
+def test_saved_two_day_trial_notices_are_hidden_and_do_not_revive_read_reminders(setup, monkeypatch):
+    client, headers, ids, engine = setup
+    case, quota_id, entry = linked(setup)
+    monkeypatch.setattr(d, "today", lambda: date(2026, 10, 20))
+    with Session(engine) as db:
+        for source, kind in ((f"legal:{entry['id']}", "legal"), (f"payment:{quota_id}", "pago")):
+            db.add(m.Notice(tenant_id=db.get(m.User, ids[0]).tenant_id, user_id=ids[0],
+                case_id=case["id"], source_key=f"{source}:2026-10-22:2", kind=kind,
+                target_date=date(2026, 10, 22), notice_date=date(2026, 10, 20), anticipation=2))
+        db.commit()
+    notices = client.get("/alerts", headers=headers[0]).json()
+    assert len(notices) == 2 and all(x["anticipation"] == 3 for x in notices)
+    for notice in notices:
+        assert client.post(f"/alerts/{notice['id']}/read", headers=headers[0]).status_code == 200
+    assert client.get("/alerts", headers=headers[0]).json() == []
+    monkeypatch.setattr(d, "today", lambda: date(2026, 10, 21))
+    notices = client.get("/alerts", headers=headers[0]).json()
+    assert len(notices) == 2 and all(x["anticipation"] == 1 for x in notices)

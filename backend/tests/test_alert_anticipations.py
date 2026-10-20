@@ -5,7 +5,7 @@ import pytest
 from test_integral_flow import create
 
 
-@pytest.mark.parametrize("day,anticipation", [(13, 5), (15, 3), (16, 2), (19, 1), (20, 0), (21, 0)])
+@pytest.mark.parametrize("day,anticipation", [(13, 5), (15, 3), (16, 3), (19, 1), (20, 0), (21, 0)])
 def test_fresh_session_shows_latest_legal_other_and_payment_reminders(setup, monkeypatch, day, anticipation):
     client, headers, ids, _ = setup
     case = create(setup, team_member_id=ids[1], installments=[{"amount": "1000.00", "due_date": "2026-10-20"}])

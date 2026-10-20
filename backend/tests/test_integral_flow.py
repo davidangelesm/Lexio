@@ -151,7 +151,7 @@ def test_only_latest_reminder_is_visible_and_read_hides_older_pending(setup, mon
     assert len(legal) == 1 and legal[0]["anticipation"] == 1
     with Session(engine) as db:
         persisted = list(db.scalars(select(m.Notice).where(m.Notice.kind == "legal")))
-        assert sorted(x.anticipation for x in persisted) == [1, 2, 3, 5]
+        assert sorted(x.anticipation for x in persisted) == [1, 3, 5]
         assert all(x.status == "pendiente" for x in persisted)
     assert client.post(f"/alerts/{legal[0]['id']}/read", headers=headers[0]).status_code == 200
     assert not any(x["kind"] == "legal" for x in client.get("/alerts", headers=headers[0]).json())

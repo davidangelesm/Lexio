@@ -137,7 +137,7 @@ def test_restored_deadline_uses_existing_reminders_on_weekend(setup, monkeypatch
     path = f"/entries/{entry['id']}"
     original = legal_alerts(client, headers[0])[0]
     legal_alerts(client, headers[1])
-    assert original["anticipation"] == 2
+    assert original["anticipation"] == 3
     client.post(f"/alerts/{original['id']}/read", headers=headers[0])
     assert client.put(path, headers=headers[1], json=entry_data(alert_date="2026-10-14")).status_code == 200
     legal_alerts(client, headers[0])
@@ -147,7 +147,7 @@ def test_restored_deadline_uses_existing_reminders_on_weekend(setup, monkeypatch
     assert client.put(path, headers=headers[1], json=entry_data(alert_date="2026-10-13")).status_code == 200
     restored = legal_alerts(client, headers[0])
     assert len(restored) == 1 and restored[0]["id"] == original["id"]
-    assert restored[0]["anticipation"] == 2
+    assert restored[0]["anticipation"] == 3
     assert legal_alerts(client, headers[1])[0]["target_date"] == "2026-10-13"
     # Quitar y volver a añadir la misma fecha tampoco crea avisos durante el fin de semana.
     assert client.put(path, headers=headers[1], json=entry_data(alert_date=None)).status_code == 200
