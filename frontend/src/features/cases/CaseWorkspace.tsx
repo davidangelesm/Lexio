@@ -83,10 +83,17 @@ export default function CaseWorkspace({
       </button>
       <div className="page-head">
         <div>
-          <h1 className="client-title">{item.client.name}</h1>
+          <h1 className="client-title">
+            {(item.clients?.length ? item.clients : [item.client])
+              .map((c) => c.name)
+              .join(" / ")}
+          </h1>
           <h2>{item.process_type}</h2>
           <p>
-            {item.client.code} · {item.area} · {item.initial_stage}
+            {(item.clients?.length ? item.clients : [item.client])
+              .map((c) => c.code)
+              .join(" · ")}{" "}
+            · {item.area} · {item.initial_stage}
           </p>
         </div>
         <div className="actions">
@@ -109,7 +116,7 @@ export default function CaseWorkspace({
               Editar caso
             </button>
           )}
-          {isAdmin && (
+          {(isAdmin || item.responsible_id === actor.id) && (
             <button className="secondary" onClick={() => setModal("equipo")}>
               <Users size={15} />
               Equipo autorizado
@@ -139,20 +146,41 @@ export default function CaseWorkspace({
           <div>
             <dt>Documento</dt>
             <dd>
-              {item.client.document_type} · {item.client.document_number}
+              {(item.clients?.length ? item.clients : [item.client])
+                .map((c) => `${c.document_type} · ${c.document_number}`)
+                .join(" / ")}
             </dd>
           </div>
           <div>
             <dt>Celular</dt>
-            <dd>{item.client.phone || "Sin registrar"}</dd>
+            <dd>
+              {(item.clients?.length ? item.clients : [item.client])
+                .map((c) => c.phone)
+                .filter(Boolean)
+                .join(" / ") || "Sin registrar"}
+            </dd>
           </div>
           <div>
             <dt>Correo</dt>
-            <dd>{item.client.email || "Sin registrar"}</dd>
+            <dd>
+              {(item.clients?.length ? item.clients : [item.client])
+                .map((c) => c.email)
+                .filter(Boolean)
+                .join(" / ") || "Sin registrar"}
+            </dd>
           </div>
           <div>
             <dt>Dirección</dt>
-            <dd>{item.client.address || "Sin registrar"}</dd>
+            <dd>
+              {(item.clients?.length ? item.clients : [item.client])
+                .map((c) => c.address)
+                .filter(Boolean)
+                .join(" / ") || "Sin registrar"}
+            </dd>
+          </div>
+          <div>
+            <dt>Expediente / N.° de seguimiento</dt>
+            <dd>{item.tracking_number || "Sin registrar"}</dd>
           </div>
           <div>
             <dt>Etapa de ingreso</dt>
@@ -518,6 +546,7 @@ export default function CaseWorkspace({
             <CaseForm
               item={item}
               actor={actor}
+              users={users}
               clients={clients}
               areas={areas}
               saved={(updated) => {

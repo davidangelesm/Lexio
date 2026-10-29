@@ -3,7 +3,7 @@ import { Badge, Empty } from "../../../components/ui";
 import { alertsService } from "../../../services/alerts";
 import { casesService } from "../../../services/cases";
 import type { Alert, CaseTab } from "../../../types";
-import { dateLabel } from "../../../utils/format";
+import { dateLabel, timeLabel } from "../../../utils/format";
 type Props = {
   data: Alert[];
   busy: boolean;
@@ -54,7 +54,12 @@ export default function AlertTable({ data, busy, load, openCase }: Props) {
                 <tr key={item.id} className={item.urgent ? "alert-urgent" : ""}>
                   <td>
                     <strong>{item.client_name}</strong>
-                    <small>{item.client_code}</small>
+                    {item.client_document_number && (
+                      <small>
+                        {item.client_document_type || "DNI"} ·{" "}
+                        {item.client_document_number}
+                      </small>
+                    )}
                     <small>
                       {item.case_code} · {item.process_type}
                     </small>
@@ -64,6 +69,9 @@ export default function AlertTable({ data, busy, load, openCase }: Props) {
                   </td>
                   <td>
                     {dateLabel(item.target_date)}
+                    {item.target_time && (
+                      <small>Hora: {timeLabel(item.target_time)}</small>
+                    )}
                     <small>
                       {item.urgent
                         ? "Urgente · vencido"

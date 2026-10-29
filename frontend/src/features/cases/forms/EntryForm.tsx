@@ -29,12 +29,21 @@ export default function EntryForm({
     <Form
       label={item ? "Guardar cambios" : "Registrar actuación"}
       submit={async (form) => {
+        const alertDate = str(form, "alert_date") || null;
+        const alertTime = str(form, "alert_time") || null;
+        if (alertTime && !alertDate)
+          throw new Error(
+            "Indica la fecha de alerta para programar una hora de audiencia.",
+          );
         const data: EntryInput = {
           action_date: str(form, "action_date"),
           subject: str(form, "subject"),
           subject_type: str(form, "subject_type") === "otro" ? "otro" : "legal",
           description: str(form, "description"),
-          alert_date: str(form, "alert_date") || null,
+          alert_date: alertDate,
+          ...(alertTime || item?.alert_time
+            ? { alert_time: alertDate ? alertTime : null }
+            : {}),
         };
         if (
           actor.role === "admin" &&
@@ -62,6 +71,13 @@ export default function EntryForm({
           name="alert_date"
           type="date"
           defaultValue={item?.alert_date || ""}
+        />
+      </Field>
+      <Field label="Hora de alerta / audiencia (opcional)">
+        <input
+          name="alert_time"
+          type="time"
+          defaultValue={item?.alert_time || ""}
         />
       </Field>
       <Field label="Asunto">
@@ -95,7 +111,7 @@ export default function EntryForm({
         </Field>
       </div>
       {actor.role === "admin" && events.length > 0 && (
-        <div className="full rounded-lg border border-[#e0e7e2] bg-[#f8faf9] p-4">
+        <div className="full rounded-xl border border-[#bfcfc8] bg-[#f4f8f6] p-5">
           <Field label="Cuota por evento vinculada (opcional)">
             <select
               name="payment_installment_id"
@@ -110,7 +126,7 @@ export default function EntryForm({
               ))}
             </select>
           </Field>
-          <p className="muted mt-2 mb-0 text-xs">
+          <p className="muted mt-3 mb-0 text-sm">
             La cuota vence en la fecha de alerta de esta actuación y genera
             recordatorios de cobro a 5, 3 y 1 días hábiles. Si cambias esa fecha,
             el vencimiento de la cuota se actualiza. Sin fecha de alerta, queda

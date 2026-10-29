@@ -25,6 +25,7 @@ CREATE TABLE lexio_clients (
 	email VARCHAR(254) NOT NULL, 
 	address VARCHAR(250) NOT NULL, 
 	lead_source VARCHAR(30) NOT NULL DEFAULT 'Sin atribución', 
+	is_delinquent BOOL NOT NULL DEFAULT 0, 
 	id INTEGER NOT NULL AUTO_INCREMENT, 
 	tenant_id INTEGER NOT NULL, 
 	created_at DATETIME NOT NULL, 

@@ -69,6 +69,7 @@ export default function ClientsPage({
                   <th>Cliente</th>
                   <th>Documento</th>
                   <th>Contacto</th>
+                  <th>Origen</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
@@ -77,7 +78,9 @@ export default function ClientsPage({
                   <tr key={client.id}>
                     <td>
                       <strong>{client.name}</strong>
-                      <small>{client.code}</small>
+                      {client.is_delinquent && (
+                        <small className="delinquent-tag">Moroso</small>
+                      )}
                     </td>
                     <td>
                       {client.document_type} · {client.document_number}
@@ -86,6 +89,7 @@ export default function ClientsPage({
                       {client.phone || "Sin celular"}
                       <small>{client.email || "Sin correo"}</small>
                     </td>
+                    <td>{client.lead_source || "Sin atribución"}</td>
                     <td>
                       <div className="actions">
                         <button

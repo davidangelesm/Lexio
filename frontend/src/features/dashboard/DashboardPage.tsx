@@ -2,11 +2,13 @@ import { RefreshCw } from "lucide-react";
 import { Badge, Card, Empty } from "../../components/ui";
 import type { Alert, CaseTab, Dashboard, User } from "../../types";
 import { dateLabel, localDate, money } from "../../utils/format";
+import AlertCalendar from "./components/AlertCalendar";
 import AlertTable from "./components/AlertTable";
 type Props = {
   actor: User;
   dashboard?: Dashboard;
   alerts: Alert[];
+  calendarAlerts?: Alert[];
   isAdmin: boolean;
   busy: boolean;
   load: () => Promise<void>;
@@ -16,6 +18,7 @@ export default function DashboardPage({
   actor,
   dashboard,
   alerts,
+  calendarAlerts,
   isAdmin,
   busy,
   load,
@@ -58,6 +61,24 @@ export default function DashboardPage({
               openCase={openCase}
             />
           </Card>
+          <Card>
+            <div className="card-head">
+              <div>
+                <h2>Calendario de alertas</h2>
+                <p className="muted card-description">
+                  Agenda visual por semana o mes. Las alertas sin hora se ubican
+                  en la franja superior del día y las que tienen hora en su
+                  bloque horario.
+                </p>
+              </div>
+            </div>
+            <AlertCalendar
+              data={(calendarAlerts ?? alerts).filter(
+                (item) => item.kind !== "pago",
+              )}
+              openCase={openCase}
+            />
+          </Card>
           {isAdmin && (
             <Card>
               <div className="card-head">
@@ -90,7 +111,12 @@ export default function DashboardPage({
                         >
                           <td>
                             <strong>{item.client_name}</strong>
-                            <small>{item.client_code}</small>
+                            {item.client_document_number && (
+                              <small>
+                                {item.client_document_type || "DNI"} ·{" "}
+                                {item.client_document_number}
+                              </small>
+                            )}
                             <small>
                               {item.case_code} · {item.process_type}
                             </small>

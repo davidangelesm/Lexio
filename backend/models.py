@@ -50,6 +50,7 @@ class Client(Entity, Base):
     email: Mapped[str] = mapped_column(String(254), default="")
     address: Mapped[str] = mapped_column(String(250), default="")
     lead_source: Mapped[str] = mapped_column(String(30), default="Sin atribución")
+    is_delinquent: Mapped[bool] = mapped_column(default=False, server_default=text("0"))
 
 
 class LegalArea(Entity, Base):

@@ -80,30 +80,34 @@ export default function AdministrationPage({
           </table>
         </div>
       </Card>
-      <Card className="flex items-start gap-3 p-4">
-        <div className="min-w-0 flex-1">
-          <div className="py-2 text-sm">
-            <h2 className="inline text-sm">Ramas de derecho</h2>{" "}
-            <span className="muted">({areas.length})</span>
+      <Card>
+        <div className="card-head">
+          <div>
+            <h2>
+              Ramas de derecho <span className="muted">({areas.length})</span>
+            </h2>
           </div>
-          {areas.length === 0 ? (
-            <p className="muted mt-3 mb-0 text-sm">
-              Todavía no hay ramas de derecho registradas.
-            </p>
-          ) : (
-            <ul className="mt-3 flex list-none flex-wrap gap-2 p-0 text-sm">
-              {areas.map((area) => (
-                <li key={area.id} className="rounded-md bg-[#f3f5f4] px-3 py-1">
-                  {area.name}
-                </li>
-              ))}
-            </ul>
-          )}
+          <button
+            className="secondary shrink-0"
+            onClick={() => setModal("rama")}
+          >
+            <Plus size={15} />
+            Agregar rama
+          </button>
         </div>
-        <button className="secondary shrink-0" onClick={() => setModal("rama")}>
-          <Plus size={15} />
-          Agregar rama
-        </button>
+        {areas.length === 0 ? (
+          <p className="muted mb-0">
+            Todavía no hay ramas de derecho registradas.
+          </p>
+        ) : (
+          <ul className="area-list">
+            {areas.map((area) => (
+              <li key={area.id} className="area-chip">
+                {area.name}
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
       <Card>
         <h2>Últimos cambios</h2>

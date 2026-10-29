@@ -26,6 +26,7 @@ export default function CaseAccess({ item, users, changed }: Props) {
   );
   const assistants = access.filter(
     (member) =>
+      member.user_id !== item.responsible_id &&
       !users.some(
         (user) => user.id === member.user_id && user.role === "admin",
       ),
@@ -72,8 +73,9 @@ export default function CaseAccess({ item, users, changed }: Props) {
   return (
     <>
       <p className="muted text-sm">
-        El administrador es el responsable del caso y tiene acceso permanente.
-        Los asistentes lo apoyan según los permisos que les otorgues.
+        El abogado responsable y el administrador tienen acceso permanente al
+        caso. Puedes autorizar a otros miembros del equipo para que apoyen en el
+        seguimiento.
       </p>
       {error && (
         <p className="error" role="alert">
@@ -94,7 +96,11 @@ export default function CaseAccess({ item, users, changed }: Props) {
               <tr key={`admin-${user.id}`}>
                 <td>
                   {user.name}
-                  <small>Responsable del caso</small>
+                  <small>
+                    {user.id === item.responsible_id
+                      ? "Responsable del caso"
+                      : "Administrador"}
+                  </small>
                 </td>
                 <td>Administrador</td>
                 <td>
@@ -102,6 +108,18 @@ export default function CaseAccess({ item, users, changed }: Props) {
                 </td>
               </tr>
             ))}
+            {!administrators.some((u) => u.id === item.responsible_id) && (
+              <tr key={`resp-${item.responsible_id}`}>
+                <td>
+                  {item.responsible_name}
+                  <small>Responsable del caso</small>
+                </td>
+                <td>Abogado responsable</td>
+                <td>
+                  <span className="muted">Acceso permanente</span>
+                </td>
+              </tr>
+            )}
             {assistants.map((member) => (
               <tr key={member.id}>
                 <td>
@@ -135,7 +153,7 @@ export default function CaseAccess({ item, users, changed }: Props) {
           </tbody>
         </table>
       </div>
-      <div className="rounded-lg border border-[#e0e7e2] bg-[#f8faf9] p-4">
+      <div className="rounded-xl border border-[#bfcfc8] bg-[#f4f8f6] p-5">
         <h3>Agregar asistente</h3>
         {loading ? (
           <p className="muted mb-0 text-sm">Cargando equipo…</p>

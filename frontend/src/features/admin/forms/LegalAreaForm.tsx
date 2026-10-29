@@ -18,7 +18,7 @@ export default function LegalAreaForm({ done }: Props) {
       <Field label="Nombre de la rama de derecho">
         <input name="name" required maxLength={80} autoFocus />
       </Field>
-      <p className="full muted text-xs">
+      <p className="full muted text-sm">
         La nueva rama estará disponible al registrar y filtrar casos del
         estudio.
       </p>

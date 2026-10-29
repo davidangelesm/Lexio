@@ -3,12 +3,15 @@ export interface Alert {
   case_id: number;
   client_code: string;
   client_name: string;
+  client_document_type?: string;
+  client_document_number?: string;
   case_code: string;
   process_type: string;
   kind: "legal" | "otro" | "pago";
   subject?: string;
   description: string;
   target_date: string;
+  target_time?: string | null;
   notice_date: string;
   anticipation: number;
   urgent: boolean;

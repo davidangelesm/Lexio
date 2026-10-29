@@ -8,6 +8,7 @@ import { localDate, money } from "../../../utils/format";
 import AreaSelect from "../components/AreaSelect";
 type Props = {
   actor: User;
+  users?: User[];
   clients: Client[];
   areas: LegalArea[];
   item?: Case;
@@ -21,6 +22,7 @@ const cents = (value: string) => {
 };
 export default function CaseForm({
   actor,
+  users,
   clients,
   areas,
   item,
@@ -28,6 +30,9 @@ export default function CaseForm({
   saved,
 }: Props) {
   const isAdmin = actor.role === "admin";
+  const availableLawyers = users?.length
+    ? users.filter((u) => u.active || u.id === item?.responsible_id)
+    : [actor];
   const quotaLocked = (quota: InstallmentInput) =>
     item?.installments?.some(
       (original) =>
@@ -35,6 +40,13 @@ export default function CaseForm({
         (cents(original.paid) > 0n || !!original.uncollectible_reason),
     ) ?? false;
   const [fee, setFee] = useState(item?.fee || "");
+  const [clientRows, setClientRows] = useState<string[]>(
+    item?.clients?.length
+      ? item.clients.map((c) => String(c.id))
+      : item?.client
+        ? [String(item.client.id)]
+        : [clientId ? String(clientId) : ""],
+  );
   const [plan, setPlan] = useState<InstallmentInput[]>(
     item?.installments?.length
       ? item.installments.map((quota) => ({
@@ -73,11 +85,16 @@ export default function CaseForm({
               ? "Selecciona una rama del catálogo."
               : "El administrador debe configurar el catálogo de ramas antes de registrar o editar casos.",
           );
+        const responsibleId = Number(str(form, "responsible_id"));
         const data: Omit<CaseInput, "client_id"> = {
           area_id: selectedArea,
           process_type: str(form, "process_type"),
+          ...(form.has("tracking_number")
+            ? { tracking_number: str(form, "tracking_number") }
+            : {}),
           initial_stage: str(form, "initial_stage"),
           status: str(form, "status") as CaseInput["status"],
+          ...(responsibleId > 0 ? { responsible_id: responsibleId } : {}),
         };
         if (isAdmin) {
           const installments = plan.map((quota, index) => ({
@@ -103,40 +120,104 @@ export default function CaseForm({
           data.fee = honorarios;
           data.installments = installments;
         }
-        if (item) saved(await casesService.update(item.id, data));
-        else {
-          const selectedClient = Number(str(form, "client_id"));
-          if (!selectedClient)
+        const rawClients = [
+          str(form, "client_id"),
+          ...form.getAll("client_ids").map((val) => String(val).trim()),
+        ].filter(Boolean);
+        const selectedClients = [
+          ...new Set(rawClients.map(Number).filter((id) => id > 0)),
+        ];
+        if (item) {
+          const originalIds =
+            item.clients?.map((c) => c.id) ?? [item.client.id];
+          const changedClients =
+            selectedClients.length > 0 &&
+            (selectedClients.length !== originalIds.length ||
+              selectedClients.some((id, idx) => id !== originalIds[idx]));
+          saved(
+            await casesService.update(item.id, {
+              ...data,
+              ...(changedClients ? { client_ids: selectedClients } : {}),
+            }),
+          );
+        } else {
+          if (!selectedClients.length)
             throw new Error("Selecciona un cliente ya registrado.");
           saved(
-            await casesService.create({ ...data, client_id: selectedClient }),
+            await casesService.create({
+              ...data,
+              client_id: selectedClients[0],
+              ...(selectedClients.length > 1
+                ? { client_ids: selectedClients }
+                : {}),
+            }),
           );
         }
       }}
     >
-      {item ? (
-        <p className="full notice">
-          {item.client.code} · {item.client.name}
-        </p>
-      ) : (
-        <div className="full">
-          <Field label="Cliente">
-            <select name="client_id" defaultValue={clientId || ""} required>
-              <option value="">Selecciona un cliente</option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.code} · {client.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {!clients.length && (
-            <p className="notice mt-3">
-              Primero registra al cliente en la página Clientes.
-            </p>
+      <div className="full">
+        <div className="client-multi-list">
+          {clientRows.map((selectedId, index) => (
+            <div className="client-multi-row" key={`client-row-${index}`}>
+              <Field
+                label={
+                  index === 0
+                    ? "Cliente principal"
+                    : `Cliente adicional ${index}`
+                }
+              >
+                <select
+                  name={index === 0 ? "client_id" : "client_ids"}
+                  defaultValue={selectedId}
+                  required={index === 0 && !item}
+                  onChange={(event) => {
+                    const nextVal = event.target.value;
+                    setClientRows((current) =>
+                      current.map((val, pos) =>
+                        pos === index ? nextVal : val,
+                      ),
+                    );
+                  }}
+                >
+                  <option value="">Selecciona un cliente</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.document_number} · {client.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {clientRows.length > 1 && (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    setClientRows((current) =>
+                      current.filter((_, pos) => pos !== index),
+                    )
+                  }
+                >
+                  Quitar cliente
+                </button>
+              )}
+            </div>
+          ))}
+          {clients.length > 1 && (
+            <button
+              type="button"
+              className="secondary mt-2"
+              onClick={() => setClientRows((current) => [...current, ""])}
+            >
+              Agregar otro cliente al caso
+            </button>
           )}
         </div>
-      )}
+        {!clients.length && !item && (
+          <p className="notice mt-3">
+            Primero registra al cliente en la página Clientes.
+          </p>
+        )}
+      </div>
       <div className="full form-section">
         <h3>Tipo de proceso</h3>
       </div>
@@ -157,6 +238,14 @@ export default function CaseForm({
           placeholder="Ej. Divorcio, cobro de deuda…"
         />
       </Field>
+      <Field label="Expediente / Número de seguimiento">
+        <input
+          name="tracking_number"
+          maxLength={100}
+          defaultValue={item?.tracking_number || ""}
+          placeholder="Ej. 01234-2026-0-1801-JR-CI-01"
+        />
+      </Field>
       <Field label="Etapa en que se recibe el proceso">
         <input
           name="initial_stage"
@@ -171,6 +260,18 @@ export default function CaseForm({
           <option value="activo">Activo</option>
           <option value="concluido">Concluido</option>
           <option value="retirado">Retirado</option>
+        </select>
+      </Field>
+      <Field label="Abogado responsable">
+        <select
+          name="responsible_id"
+          defaultValue={item?.responsible_id ?? actor.id}
+        >
+          {availableLawyers.map((lawyer) => (
+            <option key={lawyer.id} value={lawyer.id}>
+              {lawyer.name}
+            </option>
+          ))}
         </select>
       </Field>
       {isAdmin && (

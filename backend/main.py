@@ -356,6 +356,7 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
     for name, value in data.model_dump(exclude={"client", "client_ids", "responsible_id", "fee", "installments"}, exclude_none=True).items():
         setattr(row, name, value)
     d.audit(db, user, row, "Actualizar caso", before)
+    d.sync_case_clients_delinquency(db, user, row)
     d.save(db)
     return d.case_view(db, user, row)
 
@@ -492,6 +493,7 @@ def update_collection(key: int, data: s.CollectionUpdate, db: Db, user: Actor) -
     case = d.case_access(db, user, row.case_id, edit=True, lock=True)
     row = d.get(db, m.Installment, key, user, lock=True)
     d.update_collection(db, user, row, data.reason)
+    d.sync_case_clients_delinquency(db, user, case)
     d.save(db)
     return d.case_view(db, user, case)
 
@@ -507,6 +509,7 @@ def update_case_collection(key: int, data: s.CollectionBatchUpdate, db: Db, user
         if row.case_id != key:
             raise HTTPException(404, "Cuota no encontrada en este caso")
         d.update_collection(db, user, row, data.reason)
+    d.sync_case_clients_delinquency(db, user, case)
     d.save(db)
     return d.case_view(db, user, case)
 

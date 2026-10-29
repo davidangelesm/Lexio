@@ -67,7 +67,7 @@ export default function LoginPage({ setActor }: Props) {
               />
             </Field>
           </Form>
-          <p className="text-xs muted mt-8">
+          <p className="text-sm muted mt-6 mb-0">
             El administrador crea tu cuenta y autoriza tus casos.
           </p>
         </div>

@@ -156,6 +156,36 @@ def uncollectible_amount(db: Session, user: m.User, case_id: int) -> Decimal:
         if x.uncollectible_reason is not None), ZERO)
 
 
+def sync_client_delinquency(db: Session, user: m.User, client: m.Client) -> None:
+    linked_case_ids = select(m.CaseClient.case_id).where(
+        m.CaseClient.tenant_id == user.tenant_id, m.CaseClient.client_id == client.id,
+    )
+    delinquent_cases = select(m.Case.id).where(
+        m.Case.tenant_id == user.tenant_id,
+        (m.Case.client_id == client.id) | m.Case.id.in_(linked_case_ids),
+        m.Case.status.in_(("concluido", "retirado")),
+    )
+    has_uncollectible = db.scalar(select(m.Installment.id).where(
+        m.Installment.tenant_id == user.tenant_id,
+        m.Installment.case_id.in_(delinquent_cases),
+        m.Installment.uncollectible_reason.is_not(None),
+    ).limit(1)) is not None
+    if client.is_delinquent != has_uncollectible:
+        before = public(client)
+        client.is_delinquent = has_uncollectible
+        audit(
+            db, user, client,
+            "Marcar cliente moroso" if has_uncollectible else "Retirar condición de moroso",
+            before,
+        )
+
+
+def sync_case_clients_delinquency(db: Session, user: m.User, case: m.Case) -> None:
+    db.flush()
+    for client in case_clients(db, user, case):
+        sync_client_delinquency(db, user, client)
+
+
 def update_collection(db: Session, user: m.User, row: m.Installment, reason: str | None) -> None:
     if reason is not None and row.amount == paid(db, user, row.id):
         raise HTTPException(422, "Una cuota pagada no puede marcarse incobrable")

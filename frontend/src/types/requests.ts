@@ -20,6 +20,7 @@ export interface ClientInput {
   phone: string;
   email: string;
   address: string;
+  lead_source: string;
 }
 export interface InstallmentInput {
   id?: number;
@@ -28,11 +29,14 @@ export interface InstallmentInput {
   event_name?: string | null;
 }
 export interface CaseInput {
-  client_id: number;
+  client_id?: number;
+  client_ids?: number[];
   area_id: number;
   process_type: string;
+  tracking_number?: string;
   initial_stage: string;
   status: "activo" | "concluido" | "retirado";
+  responsible_id?: number;
   fee?: string;
   installments?: InstallmentInput[];
 }
@@ -42,6 +46,7 @@ export interface EntryInput {
   subject_type: "legal" | "otro";
   description: string;
   alert_date: string | null;
+  alert_time?: string | null;
   payment_installment_id?: number | null;
 }
 export interface PaymentInput {

@@ -31,6 +31,7 @@ export function useLexio() {
   const [cases, setCases] = useState<Case[]>([]);
   const [areas, setAreas] = useState<LegalArea[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [calendarAlerts, setCalendarAlerts] = useState<Alert[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard>();
   const [audit, setAudit] = useState<Audit[]>([]);
   const [report, setReport] = useState<Report>();
@@ -42,6 +43,9 @@ export function useLexio() {
   const [search, setSearch] = useState("");
   const [area, setArea] = useState("");
   const [status, setStatus] = useState("");
+  const [reportArea, setReportArea] = useState("");
+  const [reportMonth, setReportMonth] = useState("");
+  const [reportYear, setReportYear] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const isAdmin = actor?.role === "admin";
@@ -74,6 +78,7 @@ export function useLexio() {
     setClients([]);
     setUsers([]);
     setAlerts([]);
+    setCalendarAlerts([]);
     setDashboard(undefined);
     setAudit([]);
     setReport(undefined);
@@ -84,6 +89,9 @@ export function useLexio() {
     setSearch("");
     setArea("");
     setStatus("");
+    setReportArea("");
+    setReportMonth("");
+    setReportYear("");
     setClientSearch("");
     setClientFilter("");
     setPageState("inicio");
@@ -95,6 +103,11 @@ export function useLexio() {
   }, []);
   async function load(
     filters = { search, area_id: area, status, client_id: clientFilter },
+    reportFilters = {
+      area_id: reportArea,
+      month: reportMonth,
+      year: reportYear,
+    },
   ) {
     if (!actor || renderSession !== session.current) return;
     const currentSession = session.current;
@@ -111,17 +124,28 @@ export function useLexio() {
         caseList,
         summary,
         notices,
+        scheduled,
         metrics,
         history,
       ] = await Promise.all([
         administrationService.listUsers(),
         clientsService.list(),
         legalAreasService.list(),
-        casesService.list(page === "casos" ? filters : {}),
+        casesService.list(
+          page === "casos"
+            ? {
+                ...filters,
+                status: filters.status === "archivados" ? "" : filters.status,
+              }
+            : {},
+        ),
         page === "inicio" ? dashboardService.get() : Promise.resolve(undefined),
         page === "inicio" ? alertsService.list() : Promise.resolve(undefined),
+        page === "inicio"
+          ? alertsService.listScheduled()
+          : Promise.resolve(undefined),
         page === "reportes"
-          ? reportsService.list()
+          ? reportsService.list(reportFilters)
           : Promise.resolve(undefined),
         page === "usuarios" && isAdmin
           ? administrationService.listAudit()
@@ -134,6 +158,7 @@ export function useLexio() {
       setCases(caseList);
       if (summary) setDashboard(summary);
       if (notices) setAlerts(notices);
+      if (scheduled) setCalendarAlerts(scheduled);
       if (metrics) setReport(metrics);
       if (history) setAudit(history);
     } catch (e) {
@@ -189,6 +214,12 @@ export function useLexio() {
     setClientFilter("");
     void load({ search: "", area_id: "", status: "", client_id: "" });
   }
+  function clearReportFilters() {
+    setReportArea("");
+    setReportMonth("");
+    setReportYear("");
+    void load(undefined, { area_id: "", month: "", year: "" });
+  }
   function viewClientCases(client: Client) {
     setSearch("");
     setArea("");
@@ -234,6 +265,7 @@ export function useLexio() {
     cases,
     areas,
     alerts,
+    calendarAlerts,
     dashboard,
     audit,
     report,
@@ -251,6 +283,12 @@ export function useLexio() {
     setArea,
     status,
     setStatus,
+    reportArea,
+    setReportArea,
+    reportMonth,
+    setReportMonth,
+    reportYear,
+    setReportYear,
     error,
     setError,
     busy,
@@ -260,6 +298,7 @@ export function useLexio() {
     openCase,
     done,
     clearFilters,
+    clearReportFilters,
     viewClientCases,
     newCase,
     createClient,

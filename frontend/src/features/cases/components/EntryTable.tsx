@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Badge, Empty } from "../../../components/ui";
 import { casesService } from "../../../services/cases";
 import type { Entry } from "../../../types";
-import { dateLabel, dateTimeLabels } from "../../../utils/format";
+import { dateLabel, dateTimeLabels, timeLabel } from "../../../utils/format";
 type Props = {
   entries: Entry[];
   canAttend?: boolean;
@@ -81,6 +81,9 @@ export default function EntryTable({
                       {entry.alert_date ? (
                         <>
                           {dateLabel(entry.alert_date)}
+                          {entry.alert_time && (
+                            <small>Hora: {timeLabel(entry.alert_time)}</small>
+                          )}
                           <small>
                             <Badge>
                               {entry.attended ? "Atendido" : "Pendiente"}

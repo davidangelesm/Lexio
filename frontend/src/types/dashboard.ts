@@ -5,6 +5,8 @@ export interface UpcomingPayment {
   process_type: string;
   client_code: string;
   client_name: string;
+  client_document_type?: string;
+  client_document_number?: string;
   number: number;
   due_date: string;
   event_name?: string;

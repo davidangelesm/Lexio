@@ -82,6 +82,14 @@ export default function App() {
           {page === "reportes" && (
             <Reports
               report={state.report}
+              areas={state.areas}
+              area={state.reportArea}
+              setArea={state.setReportArea}
+              month={state.reportMonth}
+              setMonth={state.setReportMonth}
+              year={state.reportYear}
+              setYear={state.setReportYear}
+              clearFilters={state.clearReportFilters}
               isAdmin={isAdmin}
               busy={busy}
               load={state.load}
@@ -108,6 +116,7 @@ export default function App() {
           {modal === "caso" && (
             <CaseForm
               actor={actor}
+              users={users}
               clients={clients}
               areas={state.areas}
               clientId={state.newCaseClientId}

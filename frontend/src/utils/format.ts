@@ -24,6 +24,15 @@ export const dateLabel = (value: string | null | undefined): string =>
         ),
       )
     : "Sin fecha";
+export const timeLabel = (value: string | null | undefined): string =>
+  value && /^\d{2}:\d{2}$/.test(value)
+    ? new Intl.DateTimeFormat("es-PE", {
+        timeZone: "America/Lima",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }).format(new Date(`2000-01-01T${value}:00-05:00`))
+    : value || "";
 
 export function dateTimeLabels(value: string): { date: string; time: string } {
   // Backend timestamps without an offset are stored as UTC.

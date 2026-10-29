@@ -27,6 +27,7 @@ import PaymentForm from "../src/features/cases/forms/PaymentForm.tsx";
 import CollectionForm from "../src/features/cases/forms/CollectionForm.tsx";
 import EntryTable from "../src/features/cases/components/EntryTable.tsx";
 import AreaSelect from "../src/features/cases/components/AreaSelect.tsx";
+import AlertCalendar from "../src/features/dashboard/components/AlertCalendar.tsx";
 import AlertTable from "../src/features/dashboard/components/AlertTable.tsx";
 import Reports from "../src/features/reports/Reports.tsx";
 import AdministrationPage from "../src/features/admin/AdministrationPage.tsx";
@@ -67,6 +68,7 @@ const client = {
   phone: "999555222",
   email: "",
   address: "Lima",
+  lead_source: "Referido",
 };
 const areas = [
   { id: 1, name: "Civil" },
@@ -419,8 +421,21 @@ test("datos personales se crean y corrigen exclusivamente en el formulario de cl
     "phone",
     "email",
     "address",
+    "lead_source",
   ])
     assert.ok(html.includes(`name="${name}"`));
+  for (const source of [
+    "Sin atribución",
+    "Instagram",
+    "Facebook",
+    "Tiktok",
+    "Web",
+    "Referido",
+    "Volantes",
+    "Otro",
+  ])
+    assert.ok(html.includes(`>${source}</option>`));
+  assert.match(html, /<option value="Sin atribución" selected="">Sin atribución<\/option>/);
   assert.doesNotMatch(
     html,
     /name="code"|name="process_type"|name="initial_stage"|Honorarios|Agregar cuota/,
@@ -434,6 +449,7 @@ test("datos personales se crean y corrigen exclusivamente en el formulario de cl
     phone: client.phone,
     email: client.email,
     address: client.address,
+    lead_source: client.lead_source,
   }))
     form.set(name, value);
   form.set("code", "NO-EDITABLE");
@@ -454,17 +470,30 @@ test("datos personales se crean y corrigen exclusivamente en el formulario de cl
     phone: client.phone,
     email: client.email,
     address: client.address,
+    lead_source: client.lead_source,
   });
   assert.equal("code" in JSON.parse(calls[1].body), false);
   assert.equal("tenant_id" in JSON.parse(calls[1].body), false);
   assert.match(render(ClientForm, { item: client, saved: noop }), /CL-000001/);
 });
-test("lista de casos ofrece botones claros y un solo estado de proceso", () => {
+test("lista de casos ofrece botones claros y separa activos de archivados sin columna Estado", () => {
   let created = false;
+  const concludedCase = {
+    ...item,
+    id: 2,
+    process_type: "Proceso concluido",
+    status: "concluido",
+  };
+  const withdrawnCase = {
+    ...item,
+    id: 3,
+    process_type: "Proceso retirado",
+    status: "retirado",
+  };
   const props = {
     actor: admin,
     isAdmin: true,
-    cases: [item],
+    cases: [item, concludedCase, withdrawnCase],
     areas,
     clients: [client],
     busy: false,
@@ -484,14 +513,18 @@ test("lista de casos ofrece botones claros y un solo estado de proceso", () => {
     },
   };
   const html = render(CasesPage, props);
-  assert.match(html, /value="retirado">Retirado/);
-  assert.match(
-    render(CasesPage, { ...props, cases: [{ ...item, status: "retirado" }] }),
-    />Retirado</,
-  );
+  assert.match(html, />Casos archivados</);
+  assert.match(html, />Nuevo caso</);
+  assert.ok(html.indexOf("Casos archivados") < html.indexOf("Nuevo caso"));
+  assert.match(html, /Cobro de deuda/);
+  assert.doesNotMatch(html, /Proceso concluido|Proceso retirado|<th>Estado<\/th>/);
+
+  const archivedHtml = render(CasesPage, { ...props, initialArchived: true });
+  assert.match(archivedHtml, /Proceso concluido/);
+  assert.match(archivedHtml, /Proceso retirado/);
+  assert.doesNotMatch(archivedHtml, /Cobro de deuda|<th>Estado<\/th>/);
   assert.match(html, />Ver caso</);
   assert.match(html, />Limpiar filtros</);
-  assert.match(html, />Nuevo caso</);
   assert.doesNotMatch(html, /suspendido|link-button/);
   findButtons(CasesPage(props), "Nuevo caso")[0].props.onClick();
   assert.equal(created, true);
@@ -542,7 +575,7 @@ test("crear caso selecciona un cliente existente y reúne proceso y honorarios",
   ])
     assert.ok(html.includes(text));
   assert.match(html, /name="client_id"/);
-  assert.match(html, /CL-000001/);
+  assert.match(html, /12345678 · Ana Torres/);
   assert.match(html, /name="initial_stage"/);
   assert.doesNotMatch(
     html,
@@ -561,7 +594,7 @@ test("nuevo caso desde un cliente conserva la selección y orienta si falta regi
   };
   assert.match(
     render(CaseForm, props),
-    /<option value="2" selected="">CL-000002 · Luis Pérez<\/option>/,
+    /<option value="2" selected="">12345678 · Luis Pérez<\/option>/,
   );
   assert.match(
     render(CaseForm, { ...props, clients: [], clientId: undefined }),
@@ -670,7 +703,7 @@ test("editar un caso a Retirado conserva el cliente y las cuotas sin reenviar da
   assert.equal(calls[0].method, "PUT");
   const data = JSON.parse(calls[0].body);
   assert.equal(data.status, "retirado");
-  assert.equal("responsible_id" in data, false);
+  assert.equal(data.responsible_id, staff.id);
   assert.equal(data.area_id, item.area_id);
   assert.equal("area" in data, false);
   assert.deepEqual(data.installments, [
@@ -774,6 +807,7 @@ test("un cliente puede tener varios casos con honorarios propios", async () => {
     process_type: "Cobro",
     initial_stage: "Demanda",
     status: "activo",
+    responsible_id: admin.id,
     fee: "1000.00",
     installments: [{ amount: "1000.00", due_date: "2026-10-15" }],
   };
@@ -801,7 +835,7 @@ test("un cliente puede tener varios casos con honorarios propios", async () => {
   await formProps(CaseForm, props).submit(form);
   assert.equal(calls[0].url, "https://lexio.test/cases");
   assert.deepEqual(JSON.parse(calls[0].body), data);
-  assert.equal("responsible_id" in JSON.parse(calls[0].body), false);
+  assert.equal(JSON.parse(calls[0].body).responsible_id, admin.id);
   assert.equal("tenant_id" in data, false);
   assert.equal("client" in JSON.parse(calls[0].body), false);
   form.set("process_type", "Desalojo");
@@ -1024,6 +1058,7 @@ test("bitácora envía asunto, tipo y descripción detallada con responsable aut
   const html = render(EntryForm, { caseId: 1, actor: staff, done: noop });
   assert.match(html, /Responsable: Abogado/);
   assert.match(html, /se guardan automáticamente/);
+  assert.match(html, /name="alert_time"/);
   assert.match(
     html,
     /<input(?=[^>]*name="subject")(?=[^>]*maxLength="150")[^>]*>/,
@@ -1031,6 +1066,22 @@ test("bitácora envía asunto, tipo y descripción detallada con responsable aut
   assert.match(html, /name="subject_type"/);
   assert.match(html, /value="otro">Otro/);
   assert.doesNotMatch(html, /is_payment_event|responsible_id/);
+  form.set("alert_time", "09:30");
+  await EntryForm({
+    caseId: 1,
+    actor: staff,
+    done: async () => {},
+  }).props.submit(form);
+  assert.equal(JSON.parse(calls[1].body).alert_time, "09:30");
+  form.set("alert_date", "");
+  await assert.rejects(
+    EntryForm({
+      caseId: 1,
+      actor: staff,
+      done: async () => {},
+    }).props.submit(form),
+    /Indica la fecha de alerta/,
+  );
 });
 test("editar actuación precarga sus fechas y texto y conserva el registro original", () => {
   const entry = {
@@ -1654,6 +1705,14 @@ test("reporte único agrupa casos y financieras por rama respetando roles", asyn
   const calls = capture(report);
   await reportsService.list();
   assert.equal(calls[0].url, "https://lexio.test/reports");
+  await reportsService.list({ area_id: "1", month: "10", year: "2026" });
+  assert.equal(
+    calls[1].url,
+    "https://lexio.test/reports?area_id=1&month=10&year=2026",
+  );
+  assert.match(html, /name="area_id"/);
+  assert.match(html, /name="month"/);
+  assert.match(html, /name="year"/);
 });
 test("administración muestra fecha y hora legibles sin recursos ni JSON", () => {
   const audit = [
@@ -1742,4 +1801,191 @@ test("usuarios conservan contraseña mínima de seis y permisos sin correo de ac
   await UserForm({ done: async () => {} }).props.submit(form);
   assert.equal(JSON.parse(calls[0].body).username, "juan");
   assert.equal("email" in JSON.parse(calls[0].body), false);
+});
+test("calendario en dashboard se ubica debajo de alertas procesales y organiza vista semanal y mensual", () => {
+  const calendarAlerts = [
+    {
+      id: 101,
+      case_id: item.id,
+      case_code: item.code,
+      process_type: item.process_type,
+      client_code: client.code,
+      client_name: client.name,
+      kind: "legal",
+      subject: "Presentar escrito de apelación",
+      description: "Sin hora fija",
+      target_date: "2026-10-15",
+      target_time: null,
+      notice_date: "2026-10-08",
+      anticipation: 5,
+      urgent: false,
+      responsible_name: admin.name,
+    },
+    {
+      id: 102,
+      case_id: item.id,
+      case_code: item.code,
+      process_type: item.process_type,
+      client_code: client.code,
+      client_name: client.name,
+      kind: "otro",
+      subject: "Audiencia única virtual",
+      description: "Con enlace de Google Meet",
+      target_date: "2026-10-15",
+      target_time: "09:30",
+      notice_date: "2026-10-08",
+      anticipation: 5,
+      urgent: false,
+      responsible_name: admin.name,
+    },
+  ];
+  const dashHtml = render(DashboardPage, {
+    actor: admin,
+    dashboard: { counts: {}, upcoming_payments: [] },
+    alerts: calendarAlerts,
+    isAdmin: true,
+    busy: false,
+    load: noop,
+    openCase: noop,
+  });
+  const alertsIdx = dashHtml.indexOf("Alertas procesales y otros");
+  const calendarIdx = dashHtml.indexOf("Calendario de alertas");
+  const paymentsIdx = dashHtml.indexOf("Alerta de cobros");
+  assert.ok(alertsIdx >= 0 && calendarIdx > alertsIdx && paymentsIdx > calendarIdx);
+
+  const weekHtml = render(AlertCalendar, {
+    data: calendarAlerts,
+    openCase: noop,
+    initialView: "week",
+    initialDate: "2026-10-15",
+  });
+  const allDaySection = weekHtml.split('data-section="time-grid"')[0];
+  const timeGridSection = weekHtml.split('data-section="time-grid"')[1];
+  assert.match(allDaySection, /Presentar escrito de apelación/);
+  assert.doesNotMatch(allDaySection, /Audiencia única virtual/);
+  assert.match(timeGridSection, /data-slot="2026-10-15T09"[\s\S]*?Audiencia única virtual/);
+  assert.match(timeGridSection, /9:30/);
+
+  const monthHtml = render(AlertCalendar, {
+    data: calendarAlerts,
+    openCase: noop,
+    initialView: "month",
+    initialDate: "2026-10-15",
+  });
+  assert.match(monthHtml, /data-section="month-grid"/);
+  assert.match(
+    monthHtml,
+    /data-month-day="2026-10-15"[\s\S]*?Presentar escrito de apelación[\s\S]*?Audiencia única virtual/,
+  );
+
+  // El calendario usa calendarAlerts (todas las programadas) y por defecto abre en la semana/mes actual
+  const defaultCurrentWeekHtml = render(AlertCalendar, {
+    data: calendarAlerts,
+    openCase: noop,
+  });
+  assert.match(defaultCurrentWeekHtml, /gcal-day-num-today/);
+});
+test("alertsService.listScheduled solicita todas las alertas programadas sin filtro de 5-3-1 días", async () => {
+  const calls = capture([]);
+  await alertsService.listScheduled();
+  assert.equal(calls[0].url, "https://lexio.test/alerts?all_scheduled=true");
+});
+test("un caso puede vincular y mostrar múltiples clientes", async () => {
+  const secondClient = {
+    ...client,
+    id: 2,
+    code: "CL-000002",
+    name: "Carlos Vega",
+    document_number: "87654321",
+  };
+  const multiCase = {
+    ...item,
+    clients: [client, secondClient],
+    client_ids: [1, 2],
+    tracking_number: "01234-2026-0-1801-JR-CI-01",
+  };
+  const calls = capture(multiCase);
+  const form = new FormData();
+  form.set("client_id", "1");
+  form.append("client_ids", "2");
+  form.set("area_id", "1");
+  form.set("process_type", "Sucesión intestada");
+  form.set("tracking_number", "01234-2026-0-1801-JR-CI-01");
+  form.set("initial_stage", "Demanda");
+  form.set("status", "activo");
+  form.set("fee", "1000.00");
+  form.set("amount_0", "1000.00");
+  form.set("due_date_0", "2026-10-15");
+
+  await formProps(CaseForm, {
+    actor: admin,
+    clients: [client, secondClient],
+    areas,
+    saved: noop,
+  }).submit(form);
+
+  assert.deepEqual(JSON.parse(calls[0].body).client_ids, [1, 2]);
+  assert.equal(JSON.parse(calls[0].body).client_id, 1);
+  assert.equal(
+    JSON.parse(calls[0].body).tracking_number,
+    "01234-2026-0-1801-JR-CI-01",
+  );
+
+  const listHtml = render(CasesPage, {
+    actor: admin,
+    isAdmin: true,
+    cases: [multiCase],
+    areas,
+    clients: [client, secondClient],
+    busy: false,
+    search: "",
+    area: "",
+    status: "",
+    clientFilter: "",
+    setSearch: noop,
+    setArea: noop,
+    setStatus: noop,
+    setClientFilter: noop,
+    load: noop,
+    clearFilters: noop,
+    openCase: noop,
+    create: noop,
+  });
+  assert.match(listHtml, /Ana Torres/);
+  assert.match(listHtml, /Carlos Vega/);
+  assert.match(listHtml, /87654321/);
+
+  const detailHtml = render(CaseWorkspace, {
+    selected: multiCase,
+    areas,
+    actor: admin,
+    users: [admin],
+    clients: [client, secondClient],
+    back: noop,
+  });
+  assert.match(detailHtml, /Ana Torres \/ Carlos Vega/);
+  assert.match(detailHtml, /DNI · 12345678 \/ DNI · 87654321/);
+  assert.match(detailHtml, /01234-2026-0-1801-JR-CI-01/);
+  assert.match(listHtml, /Exp\. 01234-2026-0-1801-JR-CI-01/);
+
+  const clientsHtml = render(ClientsPage, {
+    actor: admin,
+    clients: [client, { ...secondClient, is_delinquent: true }],
+    busy: false,
+    search: "",
+    setSearch: noop,
+    load: noop,
+    create: noop,
+    edit: noop,
+    viewCases: noop,
+    newCase: noop,
+  });
+  assert.match(
+    clientsHtml,
+    /<strong>Carlos Vega<\/strong><small class="delinquent-tag">Moroso<\/small>/,
+  );
+  assert.doesNotMatch(
+    clientsHtml,
+    /<strong>Ana Torres<\/strong><small class="delinquent-tag">Moroso<\/small>/,
+  );
 });

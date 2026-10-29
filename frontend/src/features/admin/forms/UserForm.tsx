@@ -90,7 +90,7 @@ export default function UserForm({ editUser, done }: Props) {
           </label>
         )}
       </div>
-      <p className="full muted text-xs">
+      <p className="full muted text-sm">
         El usuario no distingue mayúsculas y minúsculas. Debe ser único.{" "}
         Autoriza al equipo desde cada caso. Estos permisos no conceden acceso
         financiero.

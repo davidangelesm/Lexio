@@ -1,5 +1,5 @@
-import { Plus, Search } from "lucide-react";
-import { Badge, Card, Empty, Field } from "../../components/ui";
+import { Archive, FolderOpen, Plus, Search } from "lucide-react";
+import { Card, Empty, Field } from "../../components/ui";
 import type { Case, Client, LegalArea, User } from "../../types";
 import AreaSelect from "./components/AreaSelect";
 type Props = {
@@ -21,6 +21,7 @@ type Props = {
   openCase: (id: number) => Promise<void>;
   create: () => void;
   isAdmin: boolean;
+  initialArchived?: boolean;
 };
 export default function CasesPage({
   actor,
@@ -41,21 +42,42 @@ export default function CasesPage({
   openCase,
   create,
   isAdmin,
+  initialArchived = false,
 }: Props) {
+  const archived = initialArchived || status === "archivados";
+  const visibleCases = cases.filter((item) =>
+    archived ? item.status !== "activo" : item.status === "activo",
+  );
   return (
     <>
       <div className="page-head">
         <div>
-          <p className="eyebrow">Procesos del estudio</p>
-          <h1>Casos</h1>
-          <p>Consulta los procesos de cada cliente y su seguimiento.</p>
+          <p className="eyebrow">
+            {archived ? "Archivo del estudio" : "Procesos del estudio"}
+          </p>
+          <h1>{archived ? "Casos archivados" : "Casos"}</h1>
+          <p>
+            {archived
+              ? "Procesos concluidos o retirados del seguimiento activo."
+              : "Consulta los procesos de cada cliente y su seguimiento."}
+          </p>
         </div>
-        {(isAdmin || actor?.can_create_cases) && (
-          <button className="primary" onClick={create}>
-            <Plus size={16} />
-            Nuevo caso
+        <div className="actions">
+          <button
+            type="button"
+            className={archived ? "primary" : "secondary"}
+            onClick={() => setStatus(archived ? "" : "archivados")}
+          >
+            {archived ? <FolderOpen size={16} /> : <Archive size={16} />}
+            {archived ? "Casos activos" : "Casos archivados"}
           </button>
-        )}
+          {(isAdmin || actor?.can_create_cases) && (
+            <button className="primary" onClick={create}>
+              <Plus size={16} />
+              Nuevo caso
+            </button>
+          )}
+        </div>
       </div>
       <Card>
         <form
@@ -93,14 +115,6 @@ export default function CasesPage({
               onChange={(e) => setArea(e.target.value)}
             />
           </Field>
-          <Field label="Estado">
-            <select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="">Todos</option>
-              <option value="activo">Activo</option>
-              <option value="concluido">Concluido</option>
-              <option value="retirado">Retirado</option>
-            </select>
-          </Field>
           <div className="actions">
             <button className="primary" disabled={busy}>
               <Search size={15} />
@@ -116,7 +130,7 @@ export default function CasesPage({
             </button>
           </div>
         </form>
-        {cases.length ? (
+        {visibleCases.length ? (
           <div className="table-wrap">
             <table>
               <thead>
@@ -124,34 +138,34 @@ export default function CasesPage({
                   <th>Cliente</th>
                   <th>Tipo de proceso</th>
                   <th>Rama del Derecho</th>
-                  <th>Estado</th>
                   <th>Responsable</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {cases.map((item) => (
+                {visibleCases.map((item) => (
                   <tr key={item.id}>
                     <td>
-                      <strong>{item.client.name}</strong>
-                      <small>{item.client.code}</small>
+                      {(item.clients?.length
+                        ? item.clients
+                        : [item.client]
+                      ).map((c) => (
+                        <div key={c.id}>
+                          <strong>{c.name}</strong>
+                          <small>
+                            {c.document_type} · {c.document_number}
+                          </small>
+                        </div>
+                      ))}
                     </td>
                     <td>
                       {item.process_type}
+                      {item.tracking_number && (
+                        <small>Exp. {item.tracking_number}</small>
+                      )}
                       <small>{item.initial_stage}</small>
                     </td>
                     <td>{item.area}</td>
-                    <td>
-                      <Badge>
-                        {
-                          {
-                            activo: "Activo",
-                            concluido: "Concluido",
-                            retirado: "Retirado",
-                          }[item.status]
-                        }
-                      </Badge>
-                    </td>
                     <td>{item.responsible_name}</td>
                     <td>
                       <button
@@ -169,7 +183,13 @@ export default function CasesPage({
           </div>
         ) : (
           <Empty
-            text={busy ? "Cargando casos…" : "No hay casos para estos filtros."}
+            text={
+              busy
+                ? "Cargando casos…"
+                : archived
+                  ? "No hay casos archivados."
+                  : "No hay casos activos para estos filtros."
+            }
           />
         )}
       </Card>
