@@ -24,6 +24,7 @@ CREATE TABLE lexio_clients (
 	phone VARCHAR(30) NOT NULL, 
 	email VARCHAR(254) NOT NULL, 
 	address VARCHAR(250) NOT NULL, 
+	lead_source VARCHAR(30) NOT NULL DEFAULT 'Sin atribución', 
 	id INTEGER NOT NULL AUTO_INCREMENT, 
 	tenant_id INTEGER NOT NULL, 
 	created_at DATETIME NOT NULL, 
@@ -108,6 +109,22 @@ CREATE TABLE lexio_cases (
 
 CREATE INDEX ix_lexio_cases_tenant_id ON lexio_cases (tenant_id);
 
+CREATE TABLE lexio_case_clients (
+	case_id INTEGER NOT NULL, 
+	client_id INTEGER NOT NULL, 
+	id INTEGER NOT NULL AUTO_INCREMENT, 
+	tenant_id INTEGER NOT NULL, 
+	created_at DATETIME NOT NULL, 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_case_client_tenant_id UNIQUE (tenant_id, id), 
+	CONSTRAINT uq_case_client_pair UNIQUE (tenant_id, case_id, client_id), 
+	FOREIGN KEY(tenant_id, case_id) REFERENCES lexio_cases (tenant_id, id), 
+	FOREIGN KEY(tenant_id, client_id) REFERENCES lexio_clients (tenant_id, id), 
+	FOREIGN KEY(tenant_id) REFERENCES lexio_tenants (tenant_id)
+)ENGINE=InnoDB CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE INDEX ix_lexio_case_clients_tenant_id ON lexio_case_clients (tenant_id);
+
 CREATE TABLE lexio_access (
 	case_id INTEGER NOT NULL, 
 	user_id INTEGER NOT NULL, 
@@ -133,6 +150,7 @@ CREATE TABLE lexio_entries (
 	subject_type VARCHAR(20) NOT NULL, 
 	description TEXT NOT NULL, 
 	alert_date DATE, 
+	alert_time VARCHAR(5), 
 	attended BOOL NOT NULL, 
 	registered_by INTEGER NOT NULL, 
 	payment_installment_id INTEGER NULL,
@@ -144,6 +162,7 @@ CREATE TABLE lexio_entries (
 	FOREIGN KEY(tenant_id, case_id) REFERENCES lexio_cases (tenant_id, id), 
 	FOREIGN KEY(tenant_id, registered_by) REFERENCES lexio_users (tenant_id, id), 
 	CONSTRAINT ck_entry_subject_type CHECK (subject_type IN ('legal', 'otro')), 
+	CONSTRAINT ck_entry_alert_time CHECK (alert_time IS NULL OR alert_date IS NOT NULL), 
 	FOREIGN KEY(tenant_id) REFERENCES lexio_tenants (tenant_id)
 )ENGINE=InnoDB CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
 

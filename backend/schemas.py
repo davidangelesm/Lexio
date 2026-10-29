@@ -85,6 +85,7 @@ class CollectionBatchUpdate(CollectionUpdate):
 
 class CaseIn(Input):
     client_id: int | None = Field(default=None, gt=0)
+    client_ids: list[Annotated[int, Field(gt=0)]] | None = Field(default=None, min_length=1, max_length=50)
     client: ClientIn | None = None
     area_id: int = Field(gt=0)
     process_type: str = Field(min_length=1, max_length=150)
@@ -96,13 +97,15 @@ class CaseIn(Input):
 
     @model_validator(mode="after")
     def client_source(self):
-        if (self.client_id is None) == (self.client is None):
+        has_existing = self.client_id is not None or bool(self.client_ids)
+        if has_existing == (self.client is not None):
             raise ValueError("Selecciona un cliente existente o registra sus datos")
         return self
 
 
 class CaseUpdate(Input):
     client: ClientIn | None = None
+    client_ids: list[Annotated[int, Field(gt=0)]] | None = Field(default=None, min_length=1, max_length=50)
     area_id: int | None = Field(default=None, gt=0)
     process_type: str | None = Field(default=None, min_length=1, max_length=150)
     initial_stage: str | None = Field(default=None, min_length=1, max_length=100)

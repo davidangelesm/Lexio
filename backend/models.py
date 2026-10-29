@@ -81,6 +81,17 @@ class Case(Entity, Base):
     fee: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
 
 
+class CaseClient(Entity, Base):
+    __tablename__ = "lexio_case_clients"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_case_client_tenant_id"),
+        UniqueConstraint("tenant_id", "case_id", "client_id", name="uq_case_client_pair"),
+        ref("case_id", "cases"), ref("client_id", "clients"),
+    )
+    case_id: Mapped[int] = mapped_column(Integer)
+    client_id: Mapped[int] = mapped_column(Integer)
+
+
 class Access(Entity, Base):
     __tablename__ = "lexio_access"
     __table_args__ = (

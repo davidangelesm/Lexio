@@ -164,11 +164,33 @@ def update_collection(db: Session, user: m.User, row: m.Installment, reason: str
         audit(db, user, row, "Marcar cuota incobrable" if reason is not None else "Reactivar cobranza", before)
 
 
+def case_clients(db: Session, user: m.User, item: m.Case) -> list[m.Client]:
+    linked_ids = list(db.scalars(select(m.CaseClient.client_id).where(
+        m.CaseClient.tenant_id == user.tenant_id, m.CaseClient.case_id == item.id,
+    ).order_by(m.CaseClient.id)))
+    ordered_ids = [item.client_id, *(cid for cid in linked_ids if cid != item.client_id)]
+    return [get(db, m.Client, cid, user) for cid in ordered_ids]
+
+
+def case_client_summary(db: Session, user: m.User, item: m.Case) -> dict[str, Any]:
+    clients = case_clients(db, user, item)
+    first = clients[0]
+    return {
+        "client_code": public(first)["code"],
+        "client_name": " / ".join(c.name for c in clients),
+        "client_document_type": first.document_type,
+        "client_document_number": " / ".join(c.document_number for c in clients),
+    }
+
+
 def case_view(db: Session, user: m.User, item: m.Case) -> dict[str, Any]:
+    clients = [public(c) for c in case_clients(db, user, item)]
     data = {
         **public(item, {"fee"}),
         "area": get(db, m.LegalArea, item.area_id, user).name,
-        "client": public(get(db, m.Client, item.client_id, user)),
+        "client": clients[0],
+        "clients": clients,
+        "client_ids": [c["id"] for c in clients],
         "responsible_name": get(db, m.User, item.responsible_id, user).name,
         "access_level": access_level(db, user, item.id),
     }
@@ -190,10 +212,8 @@ def case_view(db: Session, user: m.User, item: m.Case) -> dict[str, Any]:
 
 def entry_view(db: Session, user: m.User, item: m.Entry) -> dict[str, Any]:
     case = get(db, m.Case, item.case_id, user)
-    client = get(db, m.Client, case.client_id, user)
     data = {
-        **public(item, {"payment_installment_id"}), "client_code": public(client)["code"], "client_name": client.name,
-        "client_document_type": client.document_type, "client_document_number": client.document_number,
+        **public(item, {"payment_installment_id"}), **case_client_summary(db, user, case),
         "process_type": case.process_type,
         "responsible_name": get(db, m.User, item.registered_by, user).name,
         "can_attend": (item.alert_date is not None or item.payment_installment_id is not None) and not item.attended
