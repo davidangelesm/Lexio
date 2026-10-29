@@ -67,12 +67,15 @@ def case_scope(db: Session, user: m.User):
         allowed = select(m.Access.case_id).where(
             m.Access.tenant_id == user.tenant_id, m.Access.user_id == user.id
         )
-        query = query.where(m.Case.id.in_(allowed))
+        query = query.where((m.Case.responsible_id == user.id) | m.Case.id.in_(allowed))
     return query
 
 
 def access_level(db: Session, user: m.User, key: int) -> str | None:
     if user.role == "admin":
+        return "edit"
+    case = db.scalar(select(m.Case).where(m.Case.tenant_id == user.tenant_id, m.Case.id == key))
+    if case is not None and case.responsible_id == user.id:
         return "edit"
     return db.scalar(select(m.Access.level).where(
         m.Access.tenant_id == user.tenant_id, m.Access.case_id == key, m.Access.user_id == user.id

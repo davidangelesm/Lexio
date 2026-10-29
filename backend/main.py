@@ -201,11 +201,12 @@ def create_case(data: s.CaseIn, db: Db, user: Actor) -> dict[str, Any]:
     if user.role == "admin":
         d.validate_plan(data.fee, data.installments)
     d.get(db, m.LegalArea, data.area_id, user)
-    target = d.case_responsible(db, user)
     if data.responsible_id is not None:
-        requested = d.get(db, m.User, data.responsible_id, user)
-        if requested.id != target.id:
-            raise HTTPException(422, "El responsable del caso es el administrador; los asistentes se agregan al equipo autorizado")
+        target = d.get(db, m.User, data.responsible_id, user)
+        if not target.active:
+            raise HTTPException(422, "El abogado responsable seleccionado está inactivo")
+    else:
+        target = user if user.active else d.case_responsible(db, user)
     if data.client is not None:
         if user.role != "admin" and not user.can_create_clients:
             raise HTTPException(403, "No tiene permiso para registrar clientes")
@@ -274,8 +275,17 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
             db.add(m.CaseClient(tenant_id=user.tenant_id, case_id=key, client_id=cid))
     if data.responsible_id is not None:
         target = d.get(db, m.User, data.responsible_id, user)
-        if target.id != d.case_responsible(db, user).id:
-            raise HTTPException(422, "El responsable del caso es el administrador; los asistentes se agregan al equipo autorizado")
+        if not target.active and target.id != row.responsible_id:
+            raise HTTPException(422, "El abogado responsable seleccionado está inactivo")
+        row.responsible_id = target.id
+        if target.role != "admin":
+            existing_access = db.scalar(select(m.Access).where(
+                m.Access.tenant_id == user.tenant_id, m.Access.case_id == key, m.Access.user_id == target.id,
+            ))
+            if existing_access is None:
+                db.add(m.Access(tenant_id=user.tenant_id, case_id=key, user_id=target.id, level="edit"))
+            else:
+                existing_access.level = "edit"
     if financial:
         current = d.installments(db, user, key)
         fee = data.fee if "fee" in data.model_fields_set else row.fee
@@ -342,9 +352,8 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
                 db.add(m.Installment(tenant_id=user.tenant_id, case_id=key, number=number, amount=item.amount,
                     due_date=item.due_date, event_name=item.event_name))
         row.fee = fee
-    for name, value in data.model_dump(exclude={"client", "client_ids", "fee", "installments"}, exclude_none=True).items():
+    for name, value in data.model_dump(exclude={"client", "client_ids", "responsible_id", "fee", "installments"}, exclude_none=True).items():
         setattr(row, name, value)
-    row.responsible_id = d.case_responsible(db, user).id
     d.audit(db, user, row, "Actualizar caso", before)
     d.save(db)
     return d.case_view(db, user, row)
@@ -352,21 +361,22 @@ def update_case(key: int, data: s.CaseUpdate, db: Db, user: Actor) -> dict[str, 
 
 @app.get("/cases/{key}/access")
 def list_access(key: int, db: Db, user: Actor) -> list[dict[str, Any]]:
-    admin(user)
-    d.case_access(db, user, key)
+    case = d.case_access(db, user, key)
+    if user.role != "admin" and case.responsible_id != user.id:
+        admin(user)
     return [{**d.public(x), "user_name": d.get(db, m.User, x.user_id, user).name} for x in db.scalars(select(m.Access).where(m.Access.tenant_id == user.tenant_id, m.Access.case_id == key))]
 
 
 @app.post("/cases/{key}/access")
 def grant_access(key: int, data: s.Grant, db: Db, user: Actor) -> dict[str, Any]:
-    admin(user)
     case = d.case_access(db, user, key, lock=True)
+    if user.role != "admin" and case.responsible_id != user.id:
+        admin(user)
     target = d.get(db, m.User, data.user_id, user)
     if not target.active:
         raise HTTPException(422, "Usuario inactivo")
     if target.role == "admin":
         raise HTTPException(422, "El administrador tiene acceso permanente; agrega solo asistentes")
-    d.correct_case_responsible(db, user, case)
     row = db.scalar(select(m.Access).where(m.Access.tenant_id == user.tenant_id, m.Access.case_id == key, m.Access.user_id == target.id))
     before = d.public(row) if row else None
     if row is None:
@@ -381,15 +391,15 @@ def grant_access(key: int, data: s.Grant, db: Db, user: Actor) -> dict[str, Any]
 
 @app.delete("/cases/{key}/access/{user_id}")
 def revoke_access(key: int, user_id: int, db: Db, user: Actor) -> dict[str, str]:
-    admin(user)
     case = d.case_access(db, user, key, lock=True)
+    if user.role != "admin" and case.responsible_id != user.id:
+        admin(user)
     target = d.get(db, m.User, user_id, user)
     if target.role == "admin":
         raise HTTPException(422, "El administrador tiene acceso permanente")
     row = db.scalar(select(m.Access).where(m.Access.tenant_id == user.tenant_id, m.Access.case_id == key, m.Access.user_id == user_id))
     if row is None:
         raise HTTPException(404, "Acceso no encontrado")
-    d.correct_case_responsible(db, user, case)
     d.audit(db, user, row, "Retirar acceso", d.public(row))
     db.delete(row)
     d.save(db)
