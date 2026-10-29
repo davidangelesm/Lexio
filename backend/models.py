@@ -49,7 +49,7 @@ class Client(Entity, Base):
     phone: Mapped[str] = mapped_column(String(30), default="")
     email: Mapped[str] = mapped_column(String(254), default="")
     address: Mapped[str] = mapped_column(String(250), default="")
-    lead_source: Mapped[str] = mapped_column(String(30), default="")
+    lead_source: Mapped[str] = mapped_column(String(30), default="Sin atribución")
 
 
 class LegalArea(Entity, Base):

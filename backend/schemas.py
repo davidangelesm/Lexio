@@ -49,7 +49,7 @@ class ClientIn(Input):
     phone: str = Field(default="", max_length=30)
     email: str = Field(default="", max_length=254)
     address: str = Field(default="", max_length=250)
-    lead_source: Literal["", "Instagram", "Facebook", "Tiktok", "Web", "Referido", "Volantes", "Otro"] = ""
+    lead_source: Literal["", "Sin atribución", "Instagram", "Facebook", "Tiktok", "Web", "Referido", "Volantes", "Otro"] = "Sin atribución"
 
     @model_validator(mode="after")
     def document(self):
