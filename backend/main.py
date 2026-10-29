@@ -1,6 +1,7 @@
 import os
-from datetime import timedelta
+from datetime import timedelta, timezone
 from typing import Annotated, Any
+from zoneinfo import ZoneInfo
 
 import domain as d
 import models as m
@@ -657,9 +658,25 @@ def read_alert(key: int, db: Db, user: Actor) -> dict[str, str]:
 
 
 @app.get("/reports")
-def reports(db: Db, user: Actor) -> dict[str, Any]:
+def reports(
+    db: Db,
+    user: Actor,
+    area_id: Annotated[int | None, Query(gt=0)] = None,
+    month: Annotated[int | None, Query(ge=1, le=12)] = None,
+    year: Annotated[int | None, Query(ge=1900, le=2200)] = None,
+) -> dict[str, Any]:
+    if area_id is not None:
+        d.get(db, m.LegalArea, area_id, user)
     groups: dict[int, dict[str, Any]] = {}
+    lima = ZoneInfo("America/Lima")
     for case in db.scalars(d.case_scope(db, user)):
+        if area_id is not None and case.area_id != area_id:
+            continue
+        created_local = case.created_at.replace(tzinfo=timezone.utc).astimezone(lima)
+        if year is not None and created_local.year != year:
+            continue
+        if month is not None and created_local.month != month:
+            continue
         if case.area_id not in groups:
             groups[case.area_id] = {"area_id": case.area_id, "area": d.get(db, m.LegalArea, case.area_id, user).name,
                 "total_cases": 0, "active_cases": 0, "concluded_cases": 0, "withdrawn_cases": 0}
