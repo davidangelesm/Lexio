@@ -38,6 +38,11 @@ def test_dashboard_counts_finances_and_upcoming_partial_overdue_payments(setup):
         "due_date": "2026-10-07", "amount": "500.00", "paid": "400.00", "balance": "100.00", "responsible_name": "David",
     }
     assert upcoming[1]["due_date"] == "2026-11-07" and upcoming[1]["balance"] == "500.00"
+    assert [x["subject"] for x in client.get("/alerts?all_scheduled=true", headers=headers[0]).json()] == [
+        "Obligación próxima",
+        "Enviar documentos",
+        "Obligación futura",
+    ]
     client.post(f"/entries/{legal['entry_id']}/attend", headers=headers[1])
     client.put(f"/cases/{case['id']}", headers=headers[0], json={"status": "concluido"})
     dashboard = client.get("/dashboard", headers=headers[0]).json()

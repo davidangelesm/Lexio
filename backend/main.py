@@ -491,11 +491,33 @@ def delete_payment(key: int, db: Db, user: Actor) -> dict[str, str]:
 
 
 @app.get("/alerts")
-def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
+def alerts(db: Db, user: Actor, all_scheduled: bool = False) -> list[dict[str, Any]]:
     # Un bloqueo por destinatario evita duplicar recordatorios en solicitudes simultáneas.
     d.get(db, m.User, user.id, user, lock=True)
     current = d.today()
     cases = {x.id: x for x in db.scalars(d.case_scope(db, user))}
+    if all_scheduled:
+        scheduled = []
+        query = select(m.Entry).where(
+            m.Entry.tenant_id == user.tenant_id, m.Entry.case_id.in_(cases),
+            m.Entry.alert_date.is_not(None), m.Entry.attended.is_(False),
+        ).order_by(m.Entry.alert_date, m.Entry.alert_time, m.Entry.id)
+        for entry in db.scalars(query):
+            case = cases[entry.case_id]
+            client = d.get(db, m.Client, case.client_id, user)
+            scheduled.append({
+                "id": entry.id, "case_id": case.id, "kind": entry.subject_type,
+                "target_date": entry.alert_date,
+                **({"target_time": entry.alert_time} if entry.alert_time is not None else {}),
+                "subject": entry.subject, "description": entry.description, "entry_id": entry.id,
+                "responsible_name": d.get(db, m.User, case.responsible_id, user).name,
+                "can_attend": d.access_level(db, user, case.id) == "edit",
+                "client_code": d.public(client)["code"], "client_name": client.name,
+                "client_document_type": client.document_type, "client_document_number": client.document_number,
+                "case_code": d.public(case)["code"], "process_type": case.process_type,
+                "notice_date": entry.alert_date, "anticipation": 0, "urgent": current > entry.alert_date,
+            })
+        return scheduled
     sources: dict[str, dict[str, Any]] = {}
     for entry in db.scalars(select(m.Entry).where(m.Entry.tenant_id == user.tenant_id, m.Entry.case_id.in_(cases), m.Entry.alert_date.is_not(None), m.Entry.attended.is_(False))):
         sources[f"legal:{entry.id}"] = {
