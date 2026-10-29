@@ -65,11 +65,6 @@ export default function DashboardPage({
             <div className="card-head">
               <div>
                 <h2>Calendario de alertas</h2>
-                <p className="muted card-description">
-                  Agenda visual por semana o mes. Las alertas sin hora se ubican
-                  en la franja superior del día y las que tienen hora en su
-                  bloque horario.
-                </p>
               </div>
             </div>
             <AlertCalendar

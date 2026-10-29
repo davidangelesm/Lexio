@@ -226,71 +226,74 @@ export default function AlertCalendar({
 
       {view === "week" ? (
         <div className="gcal-week-wrap">
-          <div className="gcal-week-header">
-            <div className="gcal-gutter-head">Hora</div>
-            {weekDays.map((iso, index) => {
-              const dayNumber = parseISODate(iso).getUTCDate();
-              const isToday = iso === today;
-              return (
-                <div
-                  key={iso}
-                  className={
-                    isToday ? "gcal-day-head gcal-day-head-today" : "gcal-day-head"
-                  }
-                >
-                  <span className="gcal-day-name">{DAY_NAMES_SHORT[index]}</span>
-                  <span
-                    className={
-                      isToday ? "gcal-day-num gcal-day-num-today" : "gcal-day-num"
-                    }
-                  >
-                    {dayNumber}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="gcal-allday-row" data-section="all-day">
-            <div className="gcal-gutter-label">Todo el día</div>
-            {weekDays.map((iso) => {
-              const allDayAlerts = data.filter(
-                (item) =>
-                  item.target_date === iso && parseHour(item.target_time) === null,
-              );
-              const isToday = iso === today;
-              return (
-                <div
-                  key={iso}
-                  data-date={iso}
-                  className={
-                    isToday
-                      ? "gcal-allday-cell gcal-col-today"
-                      : "gcal-allday-cell"
-                  }
-                >
-                  {allDayAlerts.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`gcal-chip gcal-chip-allday ${chipTone(item)}`}
-                      onClick={() => void openCase(item.case_id, "bitacora")}
-                      title={`${item.subject || item.description} — ${item.client_name} (${item.case_code})`}
+          <div className="gcal-week-sheet">
+            <div className="gcal-week-sticky">
+              <div className="gcal-week-header">
+                <div className="gcal-gutter-head">Hora</div>
+                {weekDays.map((iso, index) => {
+                  const dayNumber = parseISODate(iso).getUTCDate();
+                  const isToday = iso === today;
+                  return (
+                    <div
+                      key={iso}
+                      className={
+                        isToday ? "gcal-day-head gcal-day-head-today" : "gcal-day-head"
+                      }
                     >
-                      <span className="gcal-chip-title">
-                        {item.subject || item.description}
+                      <span className="gcal-day-name">{DAY_NAMES_SHORT[index]}</span>
+                      <span
+                        className={
+                          isToday ? "gcal-day-num gcal-day-num-today" : "gcal-day-num"
+                        }
+                      >
+                        {dayNumber}
                       </span>
-                      <span className="gcal-chip-meta">
-                        {item.client_name} · {item.case_code}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-          <div className="gcal-time-body" data-section="time-grid">
+              <div className="gcal-allday-row" data-section="all-day">
+                <div className="gcal-gutter-label">Todo el día</div>
+                {weekDays.map((iso) => {
+                  const allDayAlerts = data.filter(
+                    (item) =>
+                      item.target_date === iso && parseHour(item.target_time) === null,
+                  );
+                  const isToday = iso === today;
+                  return (
+                    <div
+                      key={iso}
+                      data-date={iso}
+                      className={
+                        isToday
+                          ? "gcal-allday-cell gcal-col-today"
+                          : "gcal-allday-cell"
+                      }
+                    >
+                      {allDayAlerts.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`gcal-chip gcal-chip-allday ${chipTone(item)}`}
+                          onClick={() => void openCase(item.case_id, "bitacora")}
+                          title={`${item.subject || item.description} — ${item.client_name} (${item.case_code})`}
+                        >
+                          <span className="gcal-chip-title">
+                            {item.subject || item.description}
+                          </span>
+                          <span className="gcal-chip-meta">
+                            {item.client_name} · {item.case_code}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="gcal-time-body" data-section="time-grid">
             {hours.map((hour) => (
               <div
                 key={hour}
@@ -343,6 +346,7 @@ export default function AlertCalendar({
                 })}
               </div>
             ))}
+            </div>
           </div>
         </div>
       ) : (
