@@ -75,6 +75,7 @@ class Case(Entity, Base):
     client_id: Mapped[int] = mapped_column(Integer)
     area_id: Mapped[int] = mapped_column(Integer)
     process_type: Mapped[str] = mapped_column(String(150))
+    tracking_number: Mapped[str] = mapped_column(String(100), default="", server_default="")
     initial_stage: Mapped[str] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(20), default="activo")
     responsible_id: Mapped[int] = mapped_column(Integer)

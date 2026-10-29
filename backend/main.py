@@ -184,7 +184,10 @@ def cases(db: Db, user: Actor, search: str = "", client_id: int | None = None,
             m.CaseClient.tenant_id == user.tenant_id, m.CaseClient.client_id.in_(names),
         )
         query = query.where(
-            m.Case.client_id.in_(names) | m.Case.id.in_(linked_search) | m.Case.process_type.contains(search, autoescape=True)
+            m.Case.client_id.in_(names)
+            | m.Case.id.in_(linked_search)
+            | m.Case.process_type.contains(search, autoescape=True)
+            | m.Case.tracking_number.contains(search, autoescape=True)
         )
     return [d.case_view(db, user, x) for x in db.scalars(query.order_by(m.Case.id.desc()))]
 

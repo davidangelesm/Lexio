@@ -89,6 +89,7 @@ class CaseIn(Input):
     client: ClientIn | None = None
     area_id: int = Field(gt=0)
     process_type: str = Field(min_length=1, max_length=150)
+    tracking_number: str = Field(default="", max_length=100)
     initial_stage: str = Field(min_length=1, max_length=100)
     status: Literal["activo", "concluido", "retirado"] = "activo"
     responsible_id: int | None = Field(default=None, gt=0)
@@ -108,6 +109,7 @@ class CaseUpdate(Input):
     client_ids: list[Annotated[int, Field(gt=0)]] | None = Field(default=None, min_length=1, max_length=50)
     area_id: int | None = Field(default=None, gt=0)
     process_type: str | None = Field(default=None, min_length=1, max_length=150)
+    tracking_number: str | None = Field(default=None, max_length=100)
     initial_stage: str | None = Field(default=None, min_length=1, max_length=100)
     status: Literal["activo", "concluido", "retirado"] | None = None
     responsible_id: int | None = Field(default=None, gt=0)

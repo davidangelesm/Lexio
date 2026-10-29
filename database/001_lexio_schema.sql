@@ -90,6 +90,7 @@ CREATE TABLE lexio_cases (
 	client_id INTEGER NOT NULL, 
 	area_id INTEGER NOT NULL, 
 	process_type VARCHAR(150) NOT NULL, 
+	tracking_number VARCHAR(100) NOT NULL DEFAULT '', 
 	initial_stage VARCHAR(100) NOT NULL, 
 	status VARCHAR(20) NOT NULL, 
 	responsible_id INTEGER NOT NULL, 
