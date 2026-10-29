@@ -97,6 +97,7 @@ class Entry(Entity, Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "id"), ref("case_id", "cases"), ref("registered_by", "users"),
         CheckConstraint("subject_type IN ('legal', 'otro')", name="ck_entry_subject_type"),
+        CheckConstraint("alert_time IS NULL OR alert_date IS NOT NULL", name="ck_entry_alert_time"),
         UniqueConstraint("tenant_id", "payment_installment_id", name="uq_entry_payment_installment"),
         ForeignKeyConstraint(["tenant_id", "case_id", "payment_installment_id"],
             ["lexio_installments.tenant_id", "lexio_installments.case_id", "lexio_installments.id"],
@@ -108,6 +109,7 @@ class Entry(Entity, Base):
     subject_type: Mapped[str] = mapped_column(String(20), default="legal")
     description: Mapped[str] = mapped_column(Text)
     alert_date: Mapped[date | None] = mapped_column(Date)
+    alert_time: Mapped[str | None] = mapped_column(String(5))
     attended: Mapped[bool] = mapped_column(default=False)
     registered_by: Mapped[int] = mapped_column(Integer)
     payment_installment_id: Mapped[int | None] = mapped_column(Integer)

@@ -33,7 +33,8 @@ def test_dashboard_counts_finances_and_upcoming_partial_overdue_payments(setup):
     assert len(upcoming) == 2
     assert upcoming[0] == {
         "id": case["installments"][0]["id"], "case_id": case["id"], "case_code": case["code"], "process_type": "Cobro de deuda",
-        "client_code": case["client"]["code"], "client_name": "María Torres", "number": 1,
+        "client_code": case["client"]["code"], "client_name": "María Torres",
+        "client_document_type": "DNI", "client_document_number": "12345678", "number": 1,
         "due_date": "2026-10-07", "amount": "500.00", "paid": "400.00", "balance": "100.00", "responsible_name": "David",
     }
     assert upcoming[1]["due_date"] == "2026-11-07" and upcoming[1]["balance"] == "500.00"

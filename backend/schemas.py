@@ -128,7 +128,14 @@ class EntryIn(Input):
     subject_type: Literal["legal", "otro"] = "legal"
     description: str = Field(min_length=1, max_length=10000)
     alert_date: date | None = None
+    alert_time: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")] | None = None
     payment_installment_id: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_alert_time(self):
+        if self.alert_time is not None and self.alert_date is None:
+            raise ValueError("La hora de alerta requiere una fecha de alerta")
+        return self
 
 
 class PaymentIn(Input):

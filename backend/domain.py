@@ -193,6 +193,7 @@ def entry_view(db: Session, user: m.User, item: m.Entry) -> dict[str, Any]:
     client = get(db, m.Client, case.client_id, user)
     data = {
         **public(item, {"payment_installment_id"}), "client_code": public(client)["code"], "client_name": client.name,
+        "client_document_type": client.document_type, "client_document_number": client.document_number,
         "process_type": case.process_type,
         "responsible_name": get(db, m.User, item.registered_by, user).name,
         "can_attend": (item.alert_date is not None or item.payment_installment_id is not None) and not item.attended

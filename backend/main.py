@@ -500,6 +500,7 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
     for entry in db.scalars(select(m.Entry).where(m.Entry.tenant_id == user.tenant_id, m.Entry.case_id.in_(cases), m.Entry.alert_date.is_not(None), m.Entry.attended.is_(False))):
         sources[f"legal:{entry.id}"] = {
             "case_id": entry.case_id, "kind": entry.subject_type, "target_date": entry.alert_date,
+            **({"target_time": entry.alert_time} if entry.alert_time is not None else {}),
             "subject": entry.subject, "description": entry.description, "entry_id": entry.id,
             "responsible_name": d.get(db, m.User, cases[entry.case_id].responsible_id, user).name,
             "can_attend": d.access_level(db, user, entry.case_id) == "edit",
@@ -568,6 +569,7 @@ def alerts(db: Db, user: Actor) -> list[dict[str, Any]]:
         client = d.get(db, m.Client, cases[notice.case_id].client_id, user)
         result.append({
             "id": notice.id, **data, "client_code": d.public(client)["code"], "client_name": client.name,
+            "client_document_type": client.document_type, "client_document_number": client.document_number,
             "case_code": d.public(cases[notice.case_id])["code"], "process_type": cases[notice.case_id].process_type,
             "notice_date": notice.notice_date, "anticipation": notice.anticipation, "urgent": urgent,
         })
@@ -646,6 +648,7 @@ def dashboard(db: Db, user: Actor) -> dict[str, Any]:
                 "id": item.id, "case_id": case.id, "case_code": d.public(case)["code"], "process_type": case.process_type,
                 **({"event_name": item.event_name} if item.event_name is not None else {}),
                 "client_code": d.public(client)["code"], "client_name": client.name,
+                "client_document_type": client.document_type, "client_document_number": client.document_number,
                 "number": item.number, "due_date": item.due_date,
                 "amount": item.amount, "paid": paid, "balance": item.amount - paid,
                 "responsible_name": d.get(db, m.User, case.responsible_id, user).name,
