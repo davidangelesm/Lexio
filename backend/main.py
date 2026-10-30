@@ -51,6 +51,19 @@ def me(user: Actor) -> dict[str, Any]:
     return d.public(user)
 
 
+@app.put("/auth/me")
+def update_profile(data: s.ProfileUpdate, db: Db, user: Actor) -> dict[str, Any]:
+    row = d.get(db, m.User, user.id, user, lock=True)
+    before = d.public(row)
+    row.name = data.name
+    row.username = data.username
+    if data.password:
+        row.password_hash = passwords.hash(data.password)
+    d.audit(db, user, row, "Actualizar perfil", before)
+    d.save(db)
+    return d.public(row)
+
+
 @app.get("/users")
 def users(db: Db, user: Actor) -> list[dict[str, Any]]:
     hidden = {"username", "can_create_clients", "can_create_cases"} if user.role != "admin" else set()
@@ -81,6 +94,25 @@ def update_user(key: int, data: s.UserUpdate, db: Db, user: Actor) -> dict[str, 
     d.audit(db, user, row, "Actualizar usuario", before)
     d.save(db)
     return d.public(row)
+
+
+@app.delete("/users/{key}")
+def delete_user(key: int, db: Db, user: Actor) -> dict[str, str]:
+    admin(user)
+    row = d.get(db, m.User, key, user, lock=True)
+    if row.role == "admin":
+        raise HTTPException(422, "No se puede eliminar al administrador del estudio")
+    before = d.public(row)
+    db.execute(delete(m.Access).where(m.Access.tenant_id == user.tenant_id, m.Access.user_id == key))
+    db.execute(delete(m.Notice).where(m.Notice.tenant_id == user.tenant_id, m.Notice.user_id == key))
+    db.execute(update(m.Case).where(m.Case.tenant_id == user.tenant_id, m.Case.responsible_id == key).values(responsible_id=user.id))
+    db.execute(update(m.Entry).where(m.Entry.tenant_id == user.tenant_id, m.Entry.registered_by == key).values(registered_by=user.id))
+    db.execute(update(m.Payment).where(m.Payment.tenant_id == user.tenant_id, m.Payment.registered_by == key).values(registered_by=user.id))
+    db.execute(update(m.Audit).where(m.Audit.tenant_id == user.tenant_id, m.Audit.user_id == key).values(user_id=user.id))
+    d.audit(db, user, row, "Eliminar usuario", before)
+    db.delete(row)
+    d.save(db)
+    return {"status": "ok"}
 
 
 def visible_clients(db: Db, user: m.User):

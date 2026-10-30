@@ -332,17 +332,16 @@ test("navegación separa Inicio, Clientes y Casos sin bitácora independiente", 
     "Clientes",
     "Casos",
     "Reportes",
-    "Administración",
+    "Configuración",
   ])
     assert.ok(html.includes(`title="${label}"`));
   assert.doesNotMatch(
     html,
-    /title="Alertas y vencimientos"|title="Ficha integral"|title="Bitácora del caso"|1 ·|2 ·|3 ·|4 ·/,
+    /title="Administración"|title="Alertas y vencimientos"|title="Ficha integral"|title="Bitácora del caso"|1 ·|2 ·|3 ·|4 ·/,
   );
-  assert.doesNotMatch(
-    render(AppShell, { ...props, actor: staff }),
-    /title="Administración"/,
-  );
+  const staffHtml = render(AppShell, { ...props, actor: staff });
+  assert.match(staffHtml, /title="Configuración"/);
+  assert.doesNotMatch(staffHtml, /title="Administración"/);
 });
 test("filtros envían nombres del contrato y omiten valores vacíos", async () => {
   const calls = capture([]);
@@ -1727,7 +1726,7 @@ test("administración muestra fecha y hora legibles sin recursos ni JSON", () =>
     },
   ];
   const html = render(AdministrationPage, {
-    users: [admin],
+    users: [admin, staff],
     areas: [{ id: 1, name: "Civil" }],
     audit,
     setEditUser: noop,
@@ -1735,9 +1734,27 @@ test("administración muestra fecha y hora legibles sin recursos ni JSON", () =>
   });
   assert.match(html, /8 de octubre de 2026/);
   assert.match(html, /9:30/);
+  assert.equal((html.match(/title="Eliminar asistente"/g) || []).length, 1);
+  assert.match(html, /aria-label="Eliminar a Abogado"/);
   assert.doesNotMatch(
     html,
     /lexio_payments|amount|Recurso|Registro UTC|Anticipación de avisos/,
+  );
+  const staffConfig = render(AdministrationPage, {
+    actor: staff,
+    users: [admin, staff],
+    areas: [{ id: 1, name: "Civil" }],
+    audit,
+    setEditUser: noop,
+    setModal: noop,
+  });
+  assert.match(staffConfig, /Datos de mi cuenta/);
+  assert.match(staffConfig, /name="name"/);
+  assert.match(staffConfig, /name="username"/);
+  assert.match(staffConfig, /name="password"/);
+  assert.doesNotMatch(
+    staffConfig,
+    /Usuarios del estudio|Ramas de derecho|Últimos cambios|can_create_clients|can_create_cases|Editar permisos/,
   );
 });
 

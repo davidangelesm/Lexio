@@ -4,7 +4,7 @@ import {
   LayoutDashboard,
   LogOut,
   Scale,
-  ShieldCheck,
+  Settings,
   Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -32,9 +32,6 @@ export default function AppShell({
     { key: "clientes", label: "Clientes", Icon: Users },
     { key: "casos", label: "Casos", Icon: ClipboardList },
     { key: "reportes", label: "Reportes", Icon: ChartNoAxesCombined },
-    ...(isAdmin
-      ? [{ key: "usuarios", label: "Administración", Icon: ShieldCheck }]
-      : []),
   ];
   return (
     <div className="shell">
@@ -60,9 +57,21 @@ export default function AppShell({
           ))}
         </nav>
         <div className="profile">
-          <strong>{actor.name}</strong>
-          <small>{isAdmin ? "Administrador" : "Asistente"}</small>
-          <br />
+          <div className="profile-row">
+            <div className="profile-info">
+              <strong>{actor.name}</strong>
+              <small>{isAdmin ? "Administrador" : "Asistente"}</small>
+            </div>
+            <button
+              type="button"
+              title="Configuración"
+              aria-label="Configuración"
+              className={`profile-settings ${page === "usuarios" ? "active" : ""}`}
+              onClick={() => onNavigate("usuarios")}
+            >
+              <Settings size={18} />
+            </button>
+          </div>
           <button className="secondary" onClick={onLogout}>
             <LogOut size={15} />
             Cerrar sesión
@@ -73,7 +82,10 @@ export default function AppShell({
         <header className="topbar">
           <span>
             {" "}
-            {caseCode || navigation.find((x) => x.key === page)?.label}
+            {caseCode ||
+              (page === "usuarios"
+                ? "Configuración"
+                : navigation.find((x) => x.key === page)?.label)}
           </span>
           <span>{dateLabel(localDate())}</span>
         </header>

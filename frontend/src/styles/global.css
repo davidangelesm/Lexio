@@ -229,6 +229,16 @@
     padding-top: 22px;
     font-size: 14.5px;
   }
+  .profile-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .profile-info {
+    min-width: 0;
+    flex: 1;
+  }
   .profile strong {
     display: block;
     font-size: 15.5px;
@@ -236,12 +246,45 @@
     line-height: 1.35;
     color: #ffffff;
     margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .profile small {
+    display: block;
     color: #c2dbd3;
     font-size: 13px;
     font-weight: 500;
     line-height: 1.4;
+  }
+  .profile-settings {
+    width: 38px;
+    height: 38px;
+    min-height: 38px;
+    padding: 0;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1.5px solid rgba(190, 214, 206, 0.35);
+    color: #d7e6e1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition:
+      background-color 0.16s ease,
+      border-color 0.16s ease,
+      color 0.16s ease;
+  }
+  .profile-settings:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: #ebd08e;
+    color: #ffffff;
+  }
+  .profile-settings.active {
+    background: #1f5249;
+    border-color: rgba(223, 192, 121, 0.65);
+    color: #f3d794;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
   }
   .profile .secondary {
     margin-top: 16px;
@@ -443,6 +486,16 @@
     background: #e1ece7;
     border-color: #5b796e;
     color: #0b211d;
+  }
+  .icon-button.danger {
+    color: #991b1b;
+    background: #fff5f5;
+    border-color: #e69999;
+  }
+  .icon-button.danger:hover:not(:disabled) {
+    background: #fee2e2;
+    border-color: #dc2626;
+    color: #7f1d1d;
   }
   .actions {
     display: flex;

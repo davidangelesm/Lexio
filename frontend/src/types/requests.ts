@@ -13,6 +13,11 @@ export interface UserUpdateInput extends Omit<UserInput, "password"> {
   active: boolean;
   password: string | null;
 }
+export interface ProfileUpdateInput {
+  name: string;
+  username: string;
+  password: string | null;
+}
 export interface ClientInput {
   document_type: string;
   document_number: string;

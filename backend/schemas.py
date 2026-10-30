@@ -38,6 +38,12 @@ class UserUpdate(Input):
     password: Password | None = Field(default=None, min_length=6, max_length=128)
 
 
+class ProfileUpdate(Input):
+    name: str = Field(min_length=1, max_length=150)
+    username: Username
+    password: Password | None = Field(default=None, min_length=6, max_length=128)
+
+
 class LegalAreaIn(Input):
     name: str = Field(min_length=1, max_length=80)
 

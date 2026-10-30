@@ -66,6 +66,9 @@ export function useLexio() {
     session.current += 1;
     setActorState(user);
   }
+  function updateActor(user: User) {
+    if (renderSession === session.current) setActorState(user);
+  }
   function logout() {
     session.current += 1;
     request.current += 1;
@@ -253,6 +256,7 @@ export function useLexio() {
   return {
     actor,
     setActor,
+    updateActor,
     page,
     setPage,
     selected,

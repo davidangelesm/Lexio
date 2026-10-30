@@ -95,7 +95,9 @@ export default function App() {
               load={state.load}
             />
           )}
-          {page === "usuarios" && isAdmin && <AdministrationPage {...state} />}
+          {page === "usuarios" && (
+            <AdministrationPage {...state} actor={actor} />
+          )}
         </>
       )}
       {modal && (
