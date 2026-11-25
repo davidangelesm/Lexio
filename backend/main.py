@@ -46,6 +46,15 @@ def login(data: s.Login, db: Db) -> dict[str, Any]:
     return {"access_token": token(user), "token_type": "bearer", "user": d.public(user)}
 
 
+def ensure_unique_username(db: Db, username: str, exclude_id: int | None = None) -> None:
+    # Verificación global entre todos los estudios (tenants): username es único en toda la plataforma.
+    query = select(m.User.id).where(m.User.username == username)
+    if exclude_id is not None:
+        query = query.where(m.User.id != exclude_id)
+    if db.scalar(query) is not None:
+        raise HTTPException(409, "El nombre de usuario ya está en uso; elige otro diferente")
+
+
 @app.get("/auth/me")
 def me(user: Actor) -> dict[str, Any]:
     return d.public(user)
@@ -54,6 +63,7 @@ def me(user: Actor) -> dict[str, Any]:
 @app.put("/auth/me")
 def update_profile(data: s.ProfileUpdate, db: Db, user: Actor) -> dict[str, Any]:
     row = d.get(db, m.User, user.id, user, lock=True)
+    ensure_unique_username(db, data.username, exclude_id=row.id)
     before = d.public(row)
     row.name = data.name
     row.username = data.username
@@ -73,6 +83,7 @@ def users(db: Db, user: Actor) -> list[dict[str, Any]]:
 @app.post("/users", status_code=201)
 def create_user(data: s.UserIn, db: Db, user: Actor) -> dict[str, Any]:
     admin(user)
+    ensure_unique_username(db, data.username)
     row = m.User(tenant_id=user.tenant_id, **data.model_dump(exclude={"password"}), password_hash=passwords.hash(data.password), role="staff")
     db.add(row)
     d.audit(db, user, row, "Crear usuario")
@@ -86,6 +97,7 @@ def update_user(key: int, data: s.UserUpdate, db: Db, user: Actor) -> dict[str, 
     row = d.get(db, m.User, key, user)
     if row.role == "admin":
         raise HTTPException(422, "El administrador se gestiona mediante la consola de mantenimiento")
+    ensure_unique_username(db, data.username, exclude_id=row.id)
     before = d.public(row)
     for name, value in data.model_dump(exclude={"password"}).items():
         setattr(row, name, value)

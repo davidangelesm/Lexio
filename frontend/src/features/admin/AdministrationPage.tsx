@@ -145,17 +145,17 @@ export default function AdministrationPage({
                   </td>
                   <td>{user.active ? "Activo" : "Inactivo"}</td>
                   <td>
-                    {user.role !== "admin" && (
-                      <button
-                        className="secondary"
-                        onClick={() => {
-                          setEditUser(user);
-                          setModal("usuario");
-                        }}
-                      >
-                        Editar permisos
-                      </button>
-                    )}
+                    <button
+                      className="secondary"
+                      onClick={() => {
+                        setEditUser(user);
+                        setModal("usuario");
+                      }}
+                    >
+                      {user.role === "admin"
+                        ? "Editar cuenta"
+                        : "Editar permisos"}
+                    </button>
                   </td>
                   <td className="text-right">
                     {user.role !== "admin" && (

@@ -133,7 +133,11 @@ export default function App() {
             <ClientForm item={state.editClient} saved={() => state.done()} />
           )}
           {modal === "usuario" && (
-            <UserForm editUser={state.editUser} done={state.done} />
+            <UserForm
+              editUser={state.editUser}
+              updateActor={state.updateActor}
+              done={state.done}
+            />
           )}
           {modal === "rama" && isAdmin && <LegalAreaForm done={state.done} />}
         </Modal>

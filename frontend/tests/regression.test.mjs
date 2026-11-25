@@ -1734,6 +1734,8 @@ test("administración muestra fecha y hora legibles sin recursos ni JSON", () =>
   });
   assert.match(html, /8 de octubre de 2026/);
   assert.match(html, /9:30/);
+  assert.match(html, /Editar cuenta/);
+  assert.match(html, /Editar permisos/);
   assert.equal((html.match(/title="Eliminar asistente"/g) || []).length, 1);
   assert.match(html, /aria-label="Eliminar a Abogado"/);
   assert.doesNotMatch(
@@ -1818,6 +1820,16 @@ test("usuarios conservan contraseña mínima de seis y permisos sin correo de ac
   await UserForm({ done: async () => {} }).props.submit(form);
   assert.equal(JSON.parse(calls[0].body).username, "juan");
   assert.equal("email" in JSON.parse(calls[0].body), false);
+  const adminFormHtml = render(UserForm, { editUser: admin, done: noop });
+  assert.doesNotMatch(adminFormHtml, /can_create_clients|can_create_cases|name="active"/);
+  const profileCalls = capture({ ...admin, name: "David Actualizado", username: "david.admin" });
+  const adminForm = new FormData();
+  adminForm.set("name", "David Actualizado");
+  adminForm.set("username", "david.admin");
+  adminForm.set("password", "");
+  await UserForm({ editUser: admin, done: async () => {} }).props.submit(adminForm);
+  assert.equal(profileCalls[0].url, "https://lexio.test/auth/me");
+  assert.equal(profileCalls[0].method, "PUT");
 });
 test("calendario en dashboard se ubica debajo de alertas procesales y organiza vista semanal y mensual", () => {
   const calendarAlerts = [

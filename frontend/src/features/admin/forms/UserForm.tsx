@@ -3,11 +3,23 @@ import type { LexioState } from "../../../hooks/useLexio";
 import { administrationService } from "../../../services/administration";
 import { str } from "../../../utils/form";
 
-type Props = Pick<LexioState, "editUser" | "done">;
-export default function UserForm({ editUser, done }: Props) {
+type Props = Pick<LexioState, "editUser" | "done"> &
+  Partial<Pick<LexioState, "updateActor">>;
+export default function UserForm({ editUser, updateActor, done }: Props) {
+  const isEditingAdmin = editUser?.role === "admin";
   return (
     <Form
       submit={async (f) => {
+        if (isEditingAdmin) {
+          const updated = await administrationService.updateProfile({
+            name: str(f, "name"),
+            username: str(f, "username"),
+            password: str(f, "password") || null,
+          });
+          updateActor?.(updated);
+          await done();
+          return;
+        }
         const base = {
           name: str(f, "name"),
           username: str(f, "username"),
@@ -62,38 +74,40 @@ export default function UserForm({ editUser, done }: Props) {
           autoComplete="new-password"
         />
       </Field>
-      <div className="full flex gap-5 text-sm">
-        <label>
-          <input
-            type="checkbox"
-            name="can_create_clients"
-            defaultChecked={editUser?.can_create_clients}
-          />{" "}
-          Crear clientes
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            name="can_create_cases"
-            defaultChecked={editUser?.can_create_cases}
-          />{" "}
-          Crear casos
-        </label>
-        {editUser && (
+      {!isEditingAdmin && (
+        <div className="full flex gap-5 text-sm">
           <label>
             <input
               type="checkbox"
-              name="active"
-              defaultChecked={editUser.active}
+              name="can_create_clients"
+              defaultChecked={editUser?.can_create_clients}
             />{" "}
-            Cuenta activa
+            Crear clientes
           </label>
-        )}
-      </div>
+          <label>
+            <input
+              type="checkbox"
+              name="can_create_cases"
+              defaultChecked={editUser?.can_create_cases}
+            />{" "}
+            Crear casos
+          </label>
+          {editUser && (
+            <label>
+              <input
+                type="checkbox"
+                name="active"
+                defaultChecked={editUser.active}
+              />{" "}
+              Cuenta activa
+            </label>
+          )}
+        </div>
+      )}
       <p className="full muted text-sm">
-        El usuario no distingue mayúsculas y minúsculas. Debe ser único.{" "}
-        Autoriza al equipo desde cada caso. Estos permisos no conceden acceso
-        financiero.
+        {isEditingAdmin
+          ? "El usuario no distingue mayúsculas y minúsculas. Debe ser único en toda la plataforma."
+          : "El usuario no distingue mayúsculas y minúsculas. Debe ser único. Autoriza al equipo desde cada caso. Estos permisos no conceden acceso financiero."}
       </p>
     </Form>
   );
