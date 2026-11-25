@@ -55,7 +55,7 @@ export default function LoginPage({ setActor }: Props) {
                 spellCheck={false}
                 minLength={3}
                 maxLength={50}
-                placeholder="david"
+                placeholder="Usuario"
               />
             </Field>
             <Field label="Contraseña">
@@ -64,6 +64,7 @@ export default function LoginPage({ setActor }: Props) {
                 name="password"
                 autoComplete="current-password"
                 required
+                placeholder="Contraseña"
               />
             </Field>
           </Form>
