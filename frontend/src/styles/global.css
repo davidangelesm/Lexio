@@ -642,11 +642,189 @@
     background: #e6f0ec;
     border-top: 2px solid var(--color-border-strong);
   }
+  .entry-table-wrap {
+    container-type: inline-size;
+  }
+  .entry-table-wrap:focus-visible {
+    outline: 3px solid #b58d3d;
+    outline-offset: 2px;
+  }
+  .entry-table {
+    --label-1: "Fecha";
+    --label-2: "Asunto y descripción";
+    --label-3: "Alerta";
+    --label-4: "Responsable / registro";
+    --label-5: "Acciones";
+  }
+  .entry-table th {
+    text-wrap: balance;
+  }
+  .entry-table td {
+    vertical-align: top;
+  }
+  .entry-col-date {
+    white-space: nowrap;
+    width: 1%;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+  .entry-col-detail {
+    min-width: 280px;
+    width: 46%;
+  }
+  .entry-col-alert,
+  .entry-col-meta {
+    min-width: 150px;
+    width: 16%;
+    font-variant-numeric: tabular-nums;
+  }
+  .entry-col-actions {
+    width: 1%;
+    white-space: nowrap;
+  }
+  .entry-detail-head {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-bottom: 8px;
+  }
+  .entry-subject {
+    display: inline;
+    margin: 0;
+    font-size: 0.98rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--color-ink);
+    overflow-wrap: anywhere;
+  }
   .entry-description {
-    white-space: pre-wrap;
-    min-width: 210px;
-    max-width: 400px;
+    max-inline-size: 65ch;
     line-height: 1.6;
+  }
+  .entry-description-text {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+    font-size: 0.935rem;
+    line-height: 1.6;
+    color: var(--color-ink-secondary);
+  }
+  .entry-description-text.is-clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .entry-toggle {
+    margin-top: 8px;
+    min-block-size: 32px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1.5px solid #9bb1a8;
+    background: #f4f8f6;
+    color: #14332d;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.3;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .entry-toggle:hover:not(:disabled) {
+    background: #e6f0ec;
+    border-color: #5b796e;
+  }
+  .entry-toggle-icon {
+    flex-shrink: 0;
+  }
+  .entry-toggle[aria-expanded="true"] .entry-toggle-icon {
+    rotate: 180deg;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .entry-toggle-icon {
+      transition: rotate 0.2s ease;
+    }
+  }
+  .entry-payment-note {
+    margin-top: 10px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: #f4f8f6;
+    border: 1px solid #d5e1db;
+    color: var(--color-ink-secondary);
+    font-size: 0.84rem;
+    line-height: 1.45;
+  }
+  .entry-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .entry-actions button {
+    min-height: 36px;
+    padding: 7px 14px;
+    font-size: 0.88rem;
+    width: 100%;
+  }
+  @container (width < 760px) {
+    .entry-table,
+    .entry-table thead,
+    .entry-table tbody,
+    .entry-table tr,
+    .entry-table th,
+    .entry-table td {
+      display: block;
+    }
+    .entry-table thead {
+      display: none;
+    }
+    .entry-table tbody tr {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .entry-table tbody tr:last-child {
+      border-bottom: 0;
+    }
+    .entry-table td {
+      width: auto;
+      min-width: 0;
+      padding: 6px 0;
+      border: 0;
+      white-space: normal;
+    }
+    .entry-table td::before {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--color-muted);
+      margin-bottom: 3px;
+    }
+    .entry-table td:nth-child(1)::before {
+      content: var(--label-1);
+    }
+    .entry-table td:nth-child(2)::before {
+      content: var(--label-2);
+    }
+    .entry-table td:nth-child(3)::before {
+      content: var(--label-3);
+    }
+    .entry-table td:nth-child(4)::before {
+      content: var(--label-4);
+    }
+    .entry-table td:nth-child(5)::before {
+      content: var(--label-5);
+    }
+    .entry-actions {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    .entry-actions button {
+      width: auto;
+    }
   }
   .filters {
     display: flex;
@@ -1835,6 +2013,7 @@
     .secondary,
     .danger,
     .icon-button,
+    .entry-toggle,
     .badge,
     input,
     select,

@@ -25,7 +25,9 @@ import DashboardPage from "../src/features/dashboard/DashboardPage.tsx";
 import EntryForm from "../src/features/cases/forms/EntryForm.tsx";
 import PaymentForm from "../src/features/cases/forms/PaymentForm.tsx";
 import CollectionForm from "../src/features/cases/forms/CollectionForm.tsx";
-import EntryTable from "../src/features/cases/components/EntryTable.tsx";
+import EntryTable, {
+  needsDescriptionClamp,
+} from "../src/features/cases/components/EntryTable.tsx";
 import AreaSelect from "../src/features/cases/components/AreaSelect.tsx";
 import AlertCalendar from "../src/features/dashboard/components/AlertCalendar.tsx";
 import AlertTable from "../src/features/dashboard/components/AlertTable.tsx";
@@ -2017,4 +2019,72 @@ test("un caso puede vincular y mostrar múltiples clientes", async () => {
     clientsHtml,
     /<strong>Ana Torres<\/strong><small class="delinquent-tag">Moroso<\/small>/,
   );
+});
+
+test("bitácora consolida columnas y permite expandir descripciones extensas sin perder el texto completo", () => {
+  const shortText = "Se presentó escrito de apersonamiento ante el juzgado.";
+  const longText = Array.from(
+    { length: 149 },
+    (_, index) => `palabra${index + 1}`,
+  )
+    .concat("finalCierre")
+    .join(" ");
+
+  assert.equal(needsDescriptionClamp(""), false);
+  assert.equal(needsDescriptionClamp(shortText), false);
+  assert.equal(needsDescriptionClamp("Línea 1\nLínea 2\nLínea 3"), false);
+  assert.equal(needsDescriptionClamp("Línea 1\nLínea 2\nLínea 3\nLínea 4"), true);
+  assert.equal(needsDescriptionClamp(longText), true);
+
+  const baseEntry = {
+    id: 1,
+    case_id: 1,
+    action_date: "2026-10-08",
+    subject: "Escrito breve",
+    subject_type: "legal",
+    description: shortText,
+    alert_date: "2026-10-15",
+    attended: false,
+    registered_by: admin.id,
+    responsible_name: admin.name,
+    created_at: "2026-10-08T15:00:00",
+    client_code: client.code,
+    client_name: client.name,
+    process_type: item.process_type,
+    can_attend: true,
+  };
+  const longEntry = {
+    ...baseEntry,
+    id: 2,
+    subject: "Informe extenso de audiencia",
+    subject_type: "otro",
+    description: longText,
+  };
+
+  const html = render(EntryTable, {
+    entries: [baseEntry, longEntry],
+    canEdit: true,
+    canAttend: true,
+    edit: noop,
+    load: noop,
+  });
+
+  const headers = [...html.matchAll(/<th>([^<]+)<\/th>/g)].map(
+    (match) => match[1],
+  );
+  assert.deepEqual(headers, [
+    "Fecha",
+    "Asunto y descripción",
+    "Alerta",
+    "Responsable / registro",
+    "Acciones",
+  ]);
+  assert.match(
+    html,
+    /role="region"[^>]*aria-label="Bitácora del caso"[^>]*tabindex="0"|tabindex="0"[^>]*role="region"[^>]*aria-label="Bitácora del caso"/,
+  );
+  assert.match(html, /finalCierre/);
+  assert.match(html, /class="entry-description-text is-clamped"/);
+  assert.equal((html.match(/>Ver completa</g) || []).length, 1);
+  assert.match(html, /aria-expanded="false"[^>]*aria-controls="entry-desc-2"/);
 });
